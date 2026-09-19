@@ -1,9 +1,10 @@
 [package]
-name = "pw"
-version = "0.7.0"
+name = "mypass"
+version = "0.8.0"
 edition = "2021"
-description = "A command line password manager"
+description = "MyPass command line password manager"
 license = "Apache-2.0"
+default-run = "mypass"
 
 [dependencies]
 serde = { version = "~1.0.228", features = ["derive"] }
@@ -28,12 +29,12 @@ dirs = "~6.0.0"
 rpassword = "7.5.4"
 
 [[bin]]
-name = "pw"
+name = "mypass"
 path = "src/main.rs"
 
 [[bin]]
-name = "pw-browser-host"
-path = "src/bin/pw-browser-host/main.rs"
+name = "mypass-browser-host"
+path = "src/bin/mypass-browser-host/main.rs"
 
 [target.'cfg(unix)'.dependencies]
 libc = "~0.2.180"

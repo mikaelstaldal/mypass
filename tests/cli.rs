@@ -10,7 +10,7 @@ const PASSPHRASE: &str = "test passphrase\n";
 /// A `pw` command against `vault`, with the passphrase taken from stdin and
 /// small scrypt parameters so debug-mode tests stay fast.
 fn pw(vault: &Path) -> Command {
-    let mut cmd = Command::cargo_bin("pw").unwrap();
+    let mut cmd = Command::cargo_bin("mypass").unwrap();
     cmd.arg("--file")
         .arg(vault)
         .args(["--passphrase-stdin", "--scrypt-log-n", "12"]);
@@ -67,7 +67,7 @@ fn get_fails_if_vault_does_not_exist() {
         .write_stdin(PASSPHRASE)
         .assert()
         .failure()
-        .stderr(contains("run `pw init`"));
+        .stderr(contains("run `mypass init`"));
 }
 
 #[test]
@@ -109,7 +109,7 @@ fn get_unknown_entry() {
         .write_stdin(PASSPHRASE)
         .assert()
         .failure()
-        .stderr(contains("no entry 'bogus'").and(contains("try `pw list`")));
+        .stderr(contains("no entry 'bogus'").and(contains("try `mypass list`")));
 }
 
 #[test]
@@ -122,7 +122,7 @@ fn add_duplicate_entry() {
         .write_stdin(PASSPHRASE)
         .assert()
         .failure()
-        .stderr(contains("already exists").and(contains("use `pw update`")));
+        .stderr(contains("already exists").and(contains("use `mypass update`")));
 }
 
 #[test]

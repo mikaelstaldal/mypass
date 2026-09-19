@@ -1,4 +1,4 @@
-//! `pw-browser-host` — the native-messaging host for the Firefox integration.
+//! `mypass-browser-host` — the native-messaging host for the Firefox integration.
 //! Started by Firefox (directly, or via the
 //! WebExtensions XDG portal under the snap) when the extension connects, it
 //! reads length-prefixed JSON requests on stdin and writes responses on
@@ -17,7 +17,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
-use pw::{Passphrase, PasswordEntry, PwError};
+use mypass::{MyPassError, Passphrase, PasswordEntry};
 
 use config::Config;
 use protocol::{read_message, write_message, Login, Request, Response};
@@ -33,7 +33,7 @@ fn main() -> ExitCode {
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {
-            eprintln!("pw-browser-host: {e:#}");
+            eprintln!("mypass-browser-host: {e:#}");
             ExitCode::FAILURE
         }
     }
@@ -179,7 +179,7 @@ impl Host {
         };
         // The hostname drives `url` matching. It comes from the tab's
         // origin, never from anything the page reports.
-        let Some(hostname) = pw::origin_hostname(origin) else {
+        let Some(hostname) = mypass::origin_hostname(origin) else {
             return error(id, "invalid-origin", format!("ineligible origin {origin}"));
         };
 
@@ -208,9 +208,9 @@ impl Host {
         // ignored on the gesture-driven path: a login form belongs to no
         // protection space, so a realm there would only hide entries.
         let matched = if strictness.exact() {
-            pw::exactly_matching_entries(&hostname, request.realm.as_deref(), entries)
+            mypass::exactly_matching_entries(&hostname, request.realm.as_deref(), entries)
         } else {
-            pw::matching_entries(&hostname, entries)
+            mypass::matching_entries(&hostname, entries)
         };
         debug_log::log(&format!(
             "unlocked: {} entries, {} match {hostname}",
@@ -296,16 +296,16 @@ impl Host {
             debug_log::log("pinentry: got passphrase, decrypting");
             let mut pin = pin;
             let passphrase = Passphrase::new(std::mem::take(&mut *pin));
-            match pw::list(&self.file, &passphrase) {
+            match mypass::list(&self.file, &passphrase) {
                 Ok(entries) => {
                     debug_log::log("decrypt: success");
                     return Ok(entries);
                 }
-                Err(PwError::WrongPassphrase) => {
+                Err(MyPassError::WrongPassphrase) => {
                     debug_log::log("decrypt: wrong passphrase");
                     error_hint = Some("Incorrect passphrase, try again");
                 }
-                Err(PwError::FileNotFound(_)) => return Err(UnlockError::DbMissing),
+                Err(MyPassError::FileNotFound(_)) => return Err(UnlockError::DbMissing),
                 Err(e) => return Err(UnlockError::Internal(e.to_string())),
             }
         }
@@ -327,7 +327,7 @@ fn log_startup(config: &Config) {
     if !debug_log::enabled() {
         return;
     }
-    debug_log::log(&format!("=== pw-browser-host {VERSION} starting ==="));
+    debug_log::log(&format!("=== mypass-browser-host {VERSION} starting ==="));
     debug_log::log(&format!(
         "config: vault={} cache_minutes={}",
         config.vault_file().display(),
@@ -368,7 +368,7 @@ fn unlock_error(id: u64, e: UnlockError) -> Vec<u8> {
     }
 }
 
-/// Best-effort process hardening mirroring the `pw` binary: disable core dumps
+/// Best-effort process hardening mirroring the `mypass` binary: disable core dumps
 /// so a crash cannot persist decrypted data, and mark the process
 /// non-dumpable on Linux to block `ptrace` from same-user processes. Failures
 /// are ignored (defense in depth, not a correctness requirement).

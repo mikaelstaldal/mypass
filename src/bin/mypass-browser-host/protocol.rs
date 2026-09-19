@@ -6,7 +6,7 @@ use std::io::{self, Read, Write};
 
 use serde::{Deserialize, Serialize};
 
-use pw::{PasswordEntry, Secret};
+use mypass::{PasswordEntry, Secret};
 
 /// Cap on an incoming message. Firefox permits browser→host messages up to
 /// 4 GiB, but every request this host understands is tiny; a small cap turns

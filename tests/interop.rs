@@ -9,7 +9,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use pw::scrypt_format::{self, Error, Params};
+use mypass::scrypt_format::{self, Error, Params};
 
 /// Must match how tests/data/known_answer.scrypt was generated:
 /// `scrypt enc --logN 12 -r 8 -p 1 --passphrase file:<passphrase-file>`

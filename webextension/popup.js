@@ -8,7 +8,7 @@ const listEl = document.getElementById("list");
 // A port with no messages on it: the background script watches it disconnect
 // so that an HTTP-authentication challenge waiting on a choice here falls
 // through to Firefox's own dialog the moment this popup goes away.
-browser.runtime.connect({ name: "pw-popup" });
+browser.runtime.connect({ name: "mypass-popup" });
 
 async function currentTab() {
   const tabs = await browser.tabs.query({ active: true, currentWindow: true });
@@ -164,7 +164,7 @@ vaultEl.addEventListener("click", async () => {
     cmd: wasLocked ? "unlock" : "lock",
   });
   if (!result || result.error) {
-    showStatus(result ? result.error : "No response from the pw host.", true);
+    showStatus(result ? result.error : "No response from the MyPass host.", true);
     vaultEl.disabled = false;
     return;
   }
@@ -211,7 +211,7 @@ async function init() {
     return;
   }
   if (!result || result.error) {
-    showStatus(result ? result.error : "No response from the pw host.", true);
+    showStatus(result ? result.error : "No response from the MyPass host.", true);
     return;
   }
   if (result.filled) {
@@ -232,7 +232,7 @@ async function init() {
       return;
     }
     showStatus(
-      describeChallenge(result) + " is asking for a login, and pw is locked."
+      describeChallenge(result) + " is asking for a login, and MyPass is locked."
     );
     renderAction("Unlock and sign in", unlockForAuth);
     return;

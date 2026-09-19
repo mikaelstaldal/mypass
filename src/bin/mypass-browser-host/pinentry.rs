@@ -13,10 +13,12 @@ use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 
 use zeroize::Zeroizing;
 
-/// The `pinentry` program, overridable via `$PW_PINENTRY` (used by tests and
+/// The `pinentry` program, overridable via `$MYPASS_PINENTRY` (used by tests and
 /// for unusual installs).
 fn pinentry_program() -> OsString {
-    std::env::var_os("PW_PINENTRY").unwrap_or_else(|| "pinentry".into())
+    std::env::var_os("MYPASS_PINENTRY")
+        .or_else(|| std::env::var_os("PW_PINENTRY"))
+        .unwrap_or_else(|| "pinentry".into())
 }
 
 #[derive(Debug)]
@@ -45,7 +47,7 @@ pub fn get_passphrase(
 ) -> Result<Zeroizing<String>, Error> {
     let mut pe = Pinentry::spawn()?;
     pe.forward_environment();
-    pe.send("SETTITLE pw")?;
+    pe.send("SETTITLE MyPass")?;
     pe.send(&format!("SETDESC {}", encode(desc)))?;
     pe.send(&format!("SETPROMPT {}", encode(prompt)))?;
     if let Some(error) = error {
@@ -317,7 +319,7 @@ mod tests {
 
     #[test]
     fn encode_escapes_percent_and_controls() {
-        assert_eq!(encode("Unlock ~/pw.scrypt"), "Unlock ~/pw.scrypt");
+        assert_eq!(encode("Unlock ~/mypass.scrypt"), "Unlock ~/mypass.scrypt");
         assert_eq!(encode("100%"), "100%25");
         assert_eq!(encode("a\nb"), "a%0Ab");
     }

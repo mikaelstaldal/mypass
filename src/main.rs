@@ -1,4 +1,4 @@
-//! # PW
+//! # MyPass
 //!
 //! A command line password manager. All prompting, terminal and clipboard
 //! handling lives here; the library never assumes a terminal.
@@ -17,14 +17,14 @@ use clippers::Clipboard;
 use dirs::home_dir;
 use zeroize::Zeroizing;
 
-use pw::{Params, Passphrase, PasswordEntry, Secret};
+use mypass::{Params, Passphrase, PasswordEntry, Secret};
 
 const DEFAULT_CHARSET: &str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-";
 
 #[derive(Parser)]
-#[command(version, about = "A command line password manager")]
+#[command(version, about = "MyPass — a command line password manager")]
 struct Cli {
-    /// The encrypted vault file, ~/pw.scrypt by default
+    /// The encrypted vault file, ~/mypass.scrypt by default
     #[arg(long, global = true)]
     file: Option<PathBuf>,
 
@@ -186,13 +186,13 @@ fn main() -> ExitCode {
 /// Reverse-DNS name of the native-messaging host, used as the manifest
 /// filename and its `name` field; must match the `connectNative` call in the
 /// extension's background script.
-const HOST_MANIFEST_NAME: &str = "nu.staldal.pw";
+const HOST_MANIFEST_NAME: &str = "nu.staldal.mypass";
 /// The pinned extension ID (`browser_specific_settings.gecko.id`) allowed to
 /// talk to the host.
-const EXTENSION_ID: &str = "pw@staldal.nu";
+const EXTENSION_ID: &str = "mypass@staldal.nu";
 
 /// Install (or remove) the Firefox native-messaging manifest(s) so Firefox can
-/// find `pw-browser-host`, and create a default `~/.config/pw/browser.json`.
+/// find `mypass-browser-host`, and create a default `~/.config/mypass/browser.json`.
 fn install_browser(uninstall: bool, snap: bool, no_snap: bool) -> anyhow::Result<()> {
     let home = home_dir().context("cannot determine the home directory")?;
 
@@ -221,7 +221,7 @@ fn install_browser(uninstall: bool, snap: bool, no_snap: bool) -> anyhow::Result
 
     if !host_path.exists() {
         eprintln!(
-            "Note: host binary {} does not exist yet; install it alongside pw \
+            "Note: host binary {} does not exist yet; install it alongside MyPass \
              before using the extension.",
             host_path.display()
         );
@@ -229,16 +229,16 @@ fn install_browser(uninstall: bool, snap: bool, no_snap: bool) -> anyhow::Result
     Ok(())
 }
 
-/// The absolute path to `pw-browser-host`, expected next to the running `pw`.
+/// The absolute path to `mypass-browser-host`, expected next to the running `mypass`.
 fn host_binary_path() -> anyhow::Result<PathBuf> {
-    let exe = std::env::current_exe().context("cannot determine the pw executable path")?;
+    let exe = std::env::current_exe().context("cannot determine the mypass executable path")?;
     // Resolve symlinks so the manifest points at the real binary; fall back to
     // the raw path if canonicalization fails (e.g. the file was moved).
     let exe = exe.canonicalize().unwrap_or(exe);
     let dir = exe
         .parent()
-        .context("the pw executable has no parent directory")?;
-    Ok(dir.join("pw-browser-host"))
+        .context("the mypass executable has no parent directory")?;
+    Ok(dir.join("mypass-browser-host"))
 }
 
 /// The manifest JSON. `path` must be absolute.
@@ -251,7 +251,7 @@ fn native_messaging_manifest(host_path: &Path) -> anyhow::Result<String> {
     }
     let manifest = serde_json::json!({
         "name": HOST_MANIFEST_NAME,
-        "description": "pw password manager",
+        "description": "MyPass password manager",
         "path": path,
         "type": "stdio",
         "allowed_extensions": [EXTENSION_ID],
@@ -278,11 +278,11 @@ fn uninstall_dirs(home: &Path, _snap: bool, _no_snap: bool) -> Vec<PathBuf> {
     vec![manifest_dir(home)]
 }
 
-/// Create `~/.config/pw/browser.json` with defaults, unless it already exists.
+/// Create `~/.config/mypass/browser.json` with defaults, unless it already exists.
 fn write_default_config(home: &Path) -> anyhow::Result<()> {
     let dir = dirs::config_dir()
         .unwrap_or_else(|| home.join(".config"))
-        .join("pw");
+        .join("mypass");
     let path = dir.join("browser.json");
     if path.exists() {
         println!(
@@ -293,7 +293,7 @@ fn write_default_config(home: &Path) -> anyhow::Result<()> {
     }
     fs::create_dir_all(&dir).with_context(|| format!("cannot create {}", dir.display()))?;
     let config = serde_json::to_string_pretty(&serde_json::json!({
-        "file": "~/pw.scrypt",
+        "file": "~/mypass.scrypt",
         "cache_minutes": 10,
     }))?;
     write_private(&path, config.as_bytes())
@@ -353,7 +353,7 @@ fn run() -> anyhow::Result<ExitCode> {
     let file = cli.file.unwrap_or_else(|| {
         home_dir()
             .unwrap_or_else(|| PathBuf::from("."))
-            .join("pw.scrypt")
+            .join("mypass.scrypt")
     });
     let params = Params {
         log_n: cli.scrypt_log_n.unwrap_or(Params::default().log_n),
@@ -368,12 +368,12 @@ fn run() -> anyhow::Result<ExitCode> {
     match cli.command {
         Commands::Init {} => {
             let passphrase = obtain_passphrase(cli.passphrase_stdin, true)?;
-            pw::init(&file, &passphrase, &params)?;
+            mypass::init(&file, &passphrase, &params)?;
             println!("Initialized empty vault at {}", file.display());
         }
         Commands::Get { name, show } => {
             let passphrase = obtain_passphrase(cli.passphrase_stdin, false)?;
-            let entry = pw::get(&file, &passphrase, &name)?;
+            let entry = mypass::get(&file, &passphrase, &name)?;
             if !entry.username.is_empty() {
                 println!("{}", sanitize(&entry.username));
             }
@@ -398,7 +398,7 @@ fn run() -> anyhow::Result<ExitCode> {
         }
         Commands::List { pattern } => {
             let passphrase = obtain_passphrase(cli.passphrase_stdin, false)?;
-            let entries = pw::list(&file, &passphrase)?;
+            let entries = mypass::list(&file, &passphrase)?;
             println!("Vault: {} ({} entries)", file.display(), entries.len());
             let pattern = pattern.unwrap_or_default().to_lowercase();
             for entry in entries
@@ -430,7 +430,7 @@ fn run() -> anyhow::Result<ExitCode> {
                 url: normalize_hint(url),
                 realm: normalize_hint(realm),
             };
-            pw::add(&file, &passphrase, entry, &params)?;
+            mypass::add(&file, &passphrase, entry, &params)?;
             if !show {
                 announce_copied(
                     &format!("Password for '{}'", sanitize(&name)),
@@ -449,7 +449,7 @@ fn run() -> anyhow::Result<ExitCode> {
         } => {
             if keep_password {
                 let passphrase = obtain_passphrase(cli.passphrase_stdin, false)?;
-                pw::update_keep_password(
+                mypass::update_keep_password(
                     &file,
                     &passphrase,
                     &name,
@@ -474,7 +474,7 @@ fn run() -> anyhow::Result<ExitCode> {
                     url: normalize_hint(url),
                     realm: normalize_hint(realm),
                 };
-                pw::update(&file, &passphrase, entry, &params)?;
+                mypass::update(&file, &passphrase, entry, &params)?;
                 if !show {
                     announce_copied(
                         &format!("Password for '{}'", sanitize(&name)),
@@ -489,7 +489,7 @@ fn run() -> anyhow::Result<ExitCode> {
                 return Ok(ExitCode::FAILURE);
             }
             let passphrase = obtain_passphrase(cli.passphrase_stdin, false)?;
-            pw::remove(&file, &passphrase, &name, &params)?;
+            mypass::remove(&file, &passphrase, &name, &params)?;
             println!("Removed entry '{}'.", sanitize(&name));
         }
         Commands::Generate {
@@ -507,7 +507,7 @@ fn run() -> anyhow::Result<ExitCode> {
         }
         Commands::Show { name } => {
             let passphrase = obtain_passphrase(cli.passphrase_stdin, false)?;
-            let entry = pw::get(&file, &passphrase, &name)?;
+            let entry = mypass::get(&file, &passphrase, &name)?;
             println!("name: {}", sanitize(&entry.name));
             if !entry.username.is_empty() {
                 println!("username: {}", sanitize(&entry.username));
@@ -521,7 +521,7 @@ fn run() -> anyhow::Result<ExitCode> {
         }
         Commands::Export {} => {
             let passphrase = obtain_passphrase(cli.passphrase_stdin, false)?;
-            let json = pw::export(&file, &passphrase)?;
+            let json = mypass::export(&file, &passphrase)?;
             eprintln!("Warning: the decrypted vault follows on stdout.");
             println!("{}", json.as_str());
         }
@@ -589,7 +589,7 @@ fn generate(length: u32, charset: &str) -> anyhow::Result<Secret> {
     if length < 8 {
         eprintln!("Warning: {length} characters is a short password.");
     }
-    Ok(pw::generate_password(length, charset)?)
+    Ok(mypass::generate_password(length, charset)?)
 }
 
 /// Write `text` to the system clipboard, returning a zeroizing copy of it so
@@ -691,7 +691,7 @@ fn normalize_hint(value: Option<String>) -> Option<String> {
 fn sanitize(text: &str) -> String {
     text.chars()
         .map(|c| {
-            if c.is_control() || pw::is_display_spoofing_char(c) {
+            if c.is_control() || mypass::is_display_spoofing_char(c) {
                 '\u{FFFD}'
             } else {
                 c

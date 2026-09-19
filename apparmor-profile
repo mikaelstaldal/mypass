@@ -1,9 +1,9 @@
 #include <tunables/global>
 
-profile pw ${PATH_TO_EXECUTABLE}/pw {
+profile MyPass ${PATH_TO_EXECUTABLE}/mypass {
     #include <abstractions/base>
 
-    ${PATH_TO_EXECUTABLE}/pw rm,
+    ${PATH_TO_EXECUTABLE}/mypass rm,
 
     /dev/tty rw, # read password
 
@@ -15,10 +15,10 @@ profile pw ${PATH_TO_EXECUTABLE}/pw {
     owner /run/user/@{uid}/.mutter-Xwaylandauth* r,
 
     owner @{HOME}/ r,
-    owner @{HOME}/pw.scrypt rwk,
-    owner @{HOME}/pw.scrypt.bak rwk,
-    owner @{HOME}/pw.scrypt.tmp rwk,
+    owner @{HOME}/mypass.scrypt rwk,
+    owner @{HOME}/mypass.scrypt.bak rwk,
+    owner @{HOME}/mypass.scrypt.tmp rwk,
 
-    owner @{HOME}/.config/pw/ r,
-    owner @{HOME}/.config/pw/* rw,
+    owner @{HOME}/.config/mypass/ r,
+    owner @{HOME}/.config/mypass/* rw,
 }

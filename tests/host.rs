@@ -1,4 +1,4 @@
-//! Wire-protocol tests for `pw-browser-host`. These
+//! Wire-protocol tests for `mypass-browser-host`. These
 //! exercise the framing, request dispatch and error paths that do not need a
 //! `pinentry` dialog or a real vault: `status`, `lock`, an ineligible origin,
 //! a request with no origin, and an unknown request type.
@@ -10,7 +10,7 @@ use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 /// The package version is reported in `status.version`.
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Locate the `pw-browser-host` binary next to this test executable. The test
+/// Locate the `mypass-browser-host` binary next to this test executable. The test
 /// is built into `<target>/debug/deps/`; the binary targets live one level up.
 fn host_bin() -> PathBuf {
     let mut path = std::env::current_exe().expect("current exe");
@@ -18,7 +18,7 @@ fn host_bin() -> PathBuf {
     if path.ends_with("deps") {
         path.pop();
     }
-    path.push("pw-browser-host");
+    path.push("mypass-browser-host");
     path
 }
 
@@ -34,14 +34,14 @@ impl Host {
         // built-in defaults and never reads a developer's real vault.
         let mut child = Command::new(host_bin())
             .env(
-                "PW_BROWSER_CONFIG",
-                "/nonexistent/pw-browser-host-test.json",
+                "MYPASS_BROWSER_CONFIG",
+                "/nonexistent/mypass-browser-host-test.json",
             )
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn()
-            .expect("spawn pw-browser-host");
+            .expect("spawn mypass-browser-host");
         let stdin = child.stdin.take().unwrap();
         let stdout = child.stdout.take().unwrap();
         Host {
@@ -166,7 +166,7 @@ impl Fixture {
     }
 
     fn build(cache_minutes: u64, create_vault: bool) -> Fixture {
-        use pw::{add, init, Params, Passphrase, PasswordEntry};
+        use mypass::{add, init, Params, Passphrase, PasswordEntry};
         use std::os::unix::fs::PermissionsExt;
 
         // Small KDF parameters keep the unlock fast in debug builds.
@@ -261,8 +261,8 @@ impl Host {
     /// to locate the session.
     fn spawn_with_pinentry(fixture: &Fixture) -> Host {
         let mut child = Command::new(host_bin())
-            .env("PW_BROWSER_CONFIG", &fixture.config)
-            .env("PW_PINENTRY", &fixture.stub)
+            .env("MYPASS_BROWSER_CONFIG", &fixture.config)
+            .env("MYPASS_PINENTRY", &fixture.stub)
             .env("PW_TEST_CMDLOG", &fixture.cmdlog)
             .env("DISPLAY", ":0")
             .env("TERM", "xterm-256color")
@@ -272,7 +272,7 @@ impl Host {
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn()
-            .expect("spawn pw-browser-host");
+            .expect("spawn mypass-browser-host");
         let stdin = child.stdin.take().unwrap();
         let stdout = child.stdout.take().unwrap();
         Host {

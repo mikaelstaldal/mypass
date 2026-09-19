@@ -8,7 +8,7 @@
 // The origins are also the webRequest filter, so an HTTP-auth challenge from
 // any other scheme or host never reaches the extension and gets Firefox's own
 // dialog. They mirror the host's eligibility rule (https, plus loopback for
-// local development) — see `pw::origin_hostname`.
+// local development) — see `mypass::origin_hostname`.
 const AUTH_PERMISSIONS = {
   permissions: ["webRequest", "webRequestBlocking"],
   origins: ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"],

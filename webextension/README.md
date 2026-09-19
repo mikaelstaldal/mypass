@@ -1,8 +1,8 @@
-# pw Firefox extension
+# MyPass Firefox extension
 
-The browser half of the pw Firefox integration. It holds no secrets and
+The browser half of the MyPass Firefox integration. It holds no secrets and
 contains no crypto: it asks the native host
-`pw-browser-host` for the single login matching the active tab and fills it
+`mypass-browser-host` for the single login matching the active tab and fills it
 into the page. The master passphrase is entered in a `pinentry` dialog outside
 the browser, and only the matching entry is ever sent to the extension.
 
@@ -10,7 +10,7 @@ the browser, and only the matching entry is ever sent to the extension.
 
 | File                          | Role                                                                            |
 |-------------------------------|---------------------------------------------------------------------------------|
-| `manifest.json`               | MV2 manifest; pins the extension ID `pw@staldal.nu`.                            |
+| `manifest.json`               | MV2 manifest; pins the extension ID `mypass@staldal.nu`.                            |
 | `background.js`               | Persistent background script; owns the native-messaging port, the fill flow and the HTTP-auth listener. |
 | `popup.html` / `popup.js`     | Toolbar popup; shows status and the picker when more than one entry matches.    |
 | `fill.js`                     | Injected into the active tab on demand to fill the form.                        |
@@ -20,12 +20,12 @@ the browser, and only the matching entry is ever sent to the extension.
 ## Install the native host first
 
 ```sh
-pw install-browser
+mypass install-browser
 ```
 
-This writes the native-messaging manifest (`nu.staldal.pw.json`) pointing at
-`pw-browser-host`, and a default `~/.config/pw/browser.json`. The manifest's
-`allowed_extensions` pins `pw@staldal.nu`, so only this extension can talk to
+This writes the native-messaging manifest (`nu.staldal.mypass.json`) pointing at
+`mypass-browser-host`, and a default `~/.config/mypass/browser.json`. The manifest's
+`allowed_extensions` pins `mypass@staldal.nu`, so only this extension can talk to
 the host.
 
 ## Load the extension
@@ -49,7 +49,7 @@ signed file can be installed from the GitHub releases page.
 
 On a login page, click the toolbar button or press `Ctrl+Alt+L` (remappable in
 `about:addons` → gear → *Manage Extension Shortcuts*). There is also a
-*"Fill login with pw"* context-menu item.
+*"Fill login with MyPass"* context-menu item.
 
 The popup also has an **Unlock** button (it becomes **Lock** once the vault is
 open). Unlocking there prompts for the master passphrase in `pinentry` without
@@ -60,7 +60,7 @@ host's decrypted copy immediately.
 The host fills an entry only on a site that matches the entry's `url` — set only
 from the CLI (never from the browser), which is what keeps the host read-only.
 Only entries with a `url` are eligible; set the site with
-`pw add <name> --url …` / `pw update <name> --url …` (the entry `name` is never
+`mypass add <name> --url …` / `mypass update <name> --url …` (the entry `name` is never
 matched against the site). `--realm …` narrows an entry to one HTTP
 authentication realm on that site; see below. Fills then happen with no prompt
 until the host's cache expires (`cache_minutes`, default 10).
@@ -73,7 +73,7 @@ the `401` before the prompt is shown, so it never appears.
 
 That requires seeing requests to every site (`webRequest`, `webRequestBlocking`
 and host permissions), which the extension does not ask for at install time.
-Turn it on in `about:addons` → *pw* → *Preferences* (or the *Settings* link in
+Turn it on in `about:addons` → *MyPass* → *Preferences* (or the *Settings* link in
 the popup) and Firefox asks you to grant them; the same page turns it back off,
 as does *Permissions* in `about:addons`.
 
@@ -91,7 +91,7 @@ the normal dialog appears, exactly as it does today:
   here is a click, so a subdomain someone else controls must not be able to
   collect the parent domain's password silently;
 - the entry's `realm`, if it has one, is the realm being challenged for. Set it
-  with `pw add <name> --url … --realm …` when a host runs more than one
+  with `mypass add <name> --url … --realm …` when a host runs more than one
   protection space. An entry naming the challenged realm wins outright; failing
   that, entries naming no realm are used (an untagged entry is a wildcard over
   its host, which every entry written before the field existed is); an entry
@@ -132,13 +132,13 @@ popup, since `pinentry` taking focus closes the one that started it. The
 popup's own **Unlock** button takes the same path while a challenge is waiting,
 rather than unlocking a vault the challenge has already given up on.
 
-Because pw cannot tell whether it has an entry for a site until the vault is
+Because MyPass cannot tell whether it has an entry for a site until the vault is
 open, the offer has to come before that is known: any `https:` site returning
 `401` can put it up. A host whose offer goes unanswered is left alone for five
 minutes; that memory is in the background script only and is never written to
 disk.
 
-When pw does answer, the toolbar button shows a green ✓ for three seconds once
+When MyPass does answer, the toolbar button shows a green ✓ for three seconds once
 the page has loaded — the only sign that it happened, since no dialog appears.
 (The badge has to wait for the load: a tab's badge is cleared when the tab
 navigates, and answering the challenge is part of that navigation.)
@@ -146,13 +146,13 @@ navigates, and answering the challenge is part of that navigation.)
 ## Troubleshooting
 
 Firefox discards the host's stderr, so to diagnose a fill that does nothing,
-enable the host's debug log. Add a `log_file` to `~/.config/pw/browser.json`:
+enable the host's debug log. Add a `log_file` to `~/.config/mypass/browser.json`:
 
 ```json
-{ "log_file": "~/pw-host.log" }
+{ "log_file": "~/mypass-host.log" }
 ```
 
-(or set `PW_BROWSER_LOG=/path/to/log`, which overrides it). The host then
+(or set `MYPASS_BROWSER_LOG=/path/to/log`, which overrides it). The host then
 appends, per request, its version, the environment it was launched with
 (`DISPLAY`, `WAYLAND_DISPLAY`, `DBUS_SESSION_BUS_ADDRESS`, …), the full
 pinentry exchange, and the outcome. The passphrase is never written — the
@@ -161,6 +161,10 @@ pinentry data line is reduced to its byte length. Remove `log_file` when done.
 This is the place to look when a fill hangs: it shows whether the host reached
 `pinentry`, what environment `pinentry` was given, and whether it returned a
 passphrase or stalled.
+
+For compatibility with older launchers, the host also accepts the former
+`PW_BROWSER_CONFIG`, `PW_BROWSER_LOG`, and `PW_PINENTRY` environment variables
+when their `MYPASS_*` replacements are not set.
 
 ## Limitations (phase 1)
 

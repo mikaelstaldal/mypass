@@ -10,7 +10,7 @@
   window.__pwFillListenerInstalled = true;
 
   browser.runtime.onMessage.addListener((msg) => {
-    if (!msg || msg.type !== "pw-fill") return;
+    if (!msg || msg.type !== "mypass-fill") return;
     return Promise.resolve(fill(msg.username, msg.password));
   });
 

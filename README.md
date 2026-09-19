@@ -1,6 +1,6 @@
-# pw — a command line password manager
+# MyPass — a command line password manager
 
-`pw` keeps your passwords in a single encrypted file (`~/pw.scrypt` by
+`mypass` keeps your passwords in a single encrypted file (`~/mypass.scrypt` by
 default). All cryptography happens in-process; there are no runtime
 dependencies on external programs.
 
@@ -13,25 +13,25 @@ cargo install --path .
 ## Quick start
 
 ```sh
-pw init                      # create an empty vault at ~/pw.scrypt
-pw add github.com mikael     # generate a password for an entry, copy it to the clipboard
-pw get github.com            # copy the password to the clipboard again
-pw list                      # show all entries
+mypass init                      # create an empty vault at ~/mypass.scrypt
+mypass add github.com mikael     # generate a password for an entry, copy it to the clipboard
+mypass get github.com            # copy the password to the clipboard again
+mypass list                      # show all entries
 ```
 
 ## Commands
 
-| Command                                 | Description                                                                                                |
-|-----------------------------------------|------------------------------------------------------------------------------------------------------------|
-| `pw init`                               | Create a new empty vault. Asks for the passphrase twice.                                                   |
-| `pw get <name> [--show]`                | Copy the password to the clipboard, or print it with `--show`. Prints the username first, if there is one. |
-| `pw list [PATTERN]`                     | List entries, optionally filtered by a case-insensitive substring of the name.                             |
-| `pw add <name> [username] [options]`    | Add an entry. The password is generated (and copied to the clipboard) unless `--input-password` is given.  |
-| `pw update <name> [username] [options]` | Replace the username and password of an existing entry, or just the username/url/realm with `--keep-password`. |
-| `pw remove <name> [--yes]`              | Remove an entry, after confirmation (`--yes` skips it).                                                    |
-| `pw generate [options]`                 | Generate a password without storing it.                                                                    |
-| `pw export`                             | Print the decrypted vault as JSON on stdout, for backup or migration.                                      |
-| `pw install-browser [--uninstall]`      | Install (or remove) the Firefox native-messaging manifest for the browser integration. See below.          |
+| Command                                     | Description                                                                                                    |
+|---------------------------------------------|----------------------------------------------------------------------------------------------------------------|
+| `mypass init`                               | Create a new empty vault. Asks for the passphrase twice.                                                       |
+| `mypass get <name> [--show]`                | Copy the password to the clipboard, or print it with `--show`. Prints the username first, if there is one.     |
+| `mypass list [PATTERN]`                     | List entries, optionally filtered by a case-insensitive substring of the name.                                 |
+| `mypass add <name> [username] [options]`    | Add an entry. The password is generated (and copied to the clipboard) unless `--input-password` is given.      |
+| `mypass update <name> [username] [options]` | Replace the username and password of an existing entry, or just the username/url/realm with `--keep-password`. |
+| `mypass remove <name> [--yes]`              | Remove an entry, after confirmation (`--yes` skips it).                                                        |
+| `mypass generate [options]`                 | Generate a password without storing it.                                                                        |
+| `mypass export`                             | Print the decrypted vault as JSON on stdout, for backup or migration.                                          |
+| `mypass install-browser [--uninstall]`      | Install (or remove) the Firefox native-messaging manifest for the browser integration. See below.              |
 
 Options for `add`, `update` and `generate`:
 
@@ -53,11 +53,11 @@ Options for `add`, `update` and `generate`:
 
 Global options:
 
-- `--file <path>` — use another vault file than `~/pw.scrypt`
+- `--file <path>` — use another vault file than `~/mypass.scrypt`
 - `--passphrase-stdin` — read the passphrase as a single line from stdin
   instead of prompting; for scripts and other non-interactive use
 - `--clear-timeout <secs>` — how long a copied password stays on the
-  clipboard before `pw` clears it (default 20). `pw` waits this long, then
+  clipboard before `mypass` clears it (default 20). `mypass` waits this long, then
   clears the clipboard unless you have copied something else in the meantime;
   press ENTER to clear immediately, or Ctrl-C to exit without clearing. Use
   `0` to leave the clipboard untouched (the old behaviour)
@@ -68,13 +68,13 @@ generator (ChaCha20, OS-seeded) without modulo bias.
 
 ## Firefox integration
 
-`pw` can fill usernames and passwords into login forms in Firefox **without
+`mypass` can fill usernames and passwords into login forms in Firefox **without
 using the clipboard** and **without handing Firefox the whole vault**. A
-companion binary, `pw-browser-host`, decrypts the vault in-process, releases
+companion binary, `mypass-browser-host`, decrypts the vault in-process, releases
 only the single entry matching the site you are on, and prompts for the master
 passphrase in a `pinentry` dialog *outside* the browser. Only entries with a
 `url` set are used in the browser: set the site explicitly with
-`pw add <name> --url github.com` (or `pw update <name> --url …`). An entry's
+`mypass add <name> --url github.com` (or `mypass update <name> --url …`). An entry's
 `name` is never matched against the visited site, so it can be anything you
 like — useful when you keep two accounts on one site.
 
@@ -93,10 +93,10 @@ an entry only to a site that matches the entry's `url`, which is
 set only with the master passphrase in a terminal:
 
 ```sh
-pw add github.com alice --url github.com      # declare the site with --url
-pw add work-github alice --url github.com     # name can be anything; the url decides the match
-pw update work-github --url gitlab.com --keep-password   # re-point it, password unchanged
-pw add nas-admin root --url nas.example --realm "Admin Area"   # one realm on a host
+mypass add github.com alice --url github.com      # declare the site with --url
+mypass add work-github alice --url github.com     # name can be anything; the url decides the match
+mypass update work-github --url gitlab.com --keep-password   # re-point it, password unchanged
+mypass add nas-admin root --url nas.example --realm "Admin Area"   # one realm on a host
 ```
 
 A compromised browser therefore cannot make the host release an entry for a
@@ -105,7 +105,7 @@ site you never associated with it — only you can, with the master passphrase.
 Setup:
 
 ```sh
-pw install-browser          # writes the native-messaging manifest + default config
+mypass install-browser          # writes the native-messaging manifest + default config
 ```
 
 Then load the add-on in `webextension/` (see `webextension/README.md` for
@@ -117,10 +117,10 @@ prompts for the master passphrase in `pinentry` and caches the decrypted vault
 in the host for `cache_minutes`, but fills nothing and releases no entry, so
 you can open the vault when it suits you rather than when a fill needs it.
 
-Behaviour is configured in `~/.config/pw/browser.json`:
+Behaviour is configured in `~/.config/mypass/browser.json`:
 
 ```json
-{"file": "~/pw.scrypt", "cache_minutes": 10}
+{"file": "~/mypass.scrypt", "cache_minutes": 10}
 ```
 
 - `cache_minutes` — how long a decrypted vault stays in the host's memory
@@ -135,7 +135,7 @@ the `401` is answered before the prompt is shown, and it never appears.
 
 This needs permission to see requests to all sites, so it is **off by default**
 and is not part of the install-time permissions. Turn it on in `about:addons` →
-*pw* → *Preferences*. A challenge is then answered only when it is a top-level
+*MyPass* → *Preferences*. A challenge is then answered only when it is a top-level
 page load (never an image, script or iframe), on `https:` (or loopback) and not
 a proxy, and at least one entry matches the site. Anything else falls through to
 the browser's dialog, and credentials the server rejects are never retried.
@@ -145,8 +145,8 @@ username — under one host, which the host part alone cannot tell apart. Name
 the realm on the entry and the match is unambiguous:
 
 ```sh
-pw add nas-admin root  --url nas.example --realm "Admin Area"
-pw add nas-wiki  alice --url nas.example --realm "Wiki"
+mypass add nas-admin root  --url nas.example --realm "Admin Area"
+mypass add nas-wiki  alice --url nas.example --realm "Wiki"
 ```
 
 Among the entries on a host, one naming the challenged realm wins outright; if
@@ -202,7 +202,7 @@ between (with `cache_minutes: 0` something always would). If several entries
 then match, the ordinary chooser follows in a freshly opened popup —
 `pinentry` taking focus closes the one that started it.
 
-What it costs: until the vault is open pw cannot tell whether it has an entry
+What it costs: until the vault is open MyPass cannot tell whether it has an entry
 for the site at all, so the offer necessarily comes *before* that is known —
 any `https:` site that returns `401` can put it up. To bound the nuisance, a
 host whose offer goes unanswered is not asked about again for five minutes, and
@@ -210,24 +210,24 @@ the offer still requires a top-level load in the tab you are looking at.
 
 ### Security model
 
-| Threat | Mitigation |
-|---|---|
-| Malicious/XSS'd page harvesting autofill | No fill without a user gesture; no always-on content script; the page cannot trigger the extension. Opt-in HTTP-auth filling is the one gesture-less path, and answers only the challenging site itself (see the rows below). |
-| Hidden `<img>`/`<iframe>` making the browser submit credentials in the background | HTTP-auth challenges are answered only for top-level page loads, so no subresource or embedded frame is ever answered — those get the browser's dialog. |
-| Attacker-controlled subdomain of a site you have an entry for (takeover, shared hosting, multi-tenant apex) collecting its password | The HTTP-auth path matches the host exactly: `example.com` is not released to `evil.example.com`. Parent-domain matching applies only to a fill you asked for by clicking, on a page in front of you. |
-| Site provoking `401`s to pop the chooser up repeatedly | The chooser only appears for a top-level load of a host you already have two or more entries for *in the challenged realm*, in the tab you are looking at, with the vault open — and it releases nothing until you click an entry. Dismissing it hands the challenge to the browser's dialog. |
-| Site naming another site's realm to collect its credential | The realm only ever narrows a match the host has already made exactly: an entry is released to `nas.example` and no other host, whatever realm is claimed. A realm is a label within a host, never across hosts. |
-| Site provoking `401`s to nag you into unlocking | A host whose offer you dismiss is not asked about again for five minutes, and the offer needs a top-level load in the active tab. The offer itself releases nothing and reveals nothing about the vault — pw cannot tell whether it has an entry for the site until you unlock — and it is only ever an offer: the passphrase prompt takes your click. |
-| Page trying to force a master-passphrase prompt | The HTTP-auth path sends `get-logins-strict`, which the host answers with `locked` rather than prompting, so no page load can raise a `pinentry` dialog. The guarantee lives in the host, on the request that would return the credential — not in a separate check the vault could expire behind. The one request that may prompt, `get-logins-strict-unlock`, is sent only from your click on the popup's own unlock button — a page can summon the popup, never `pinentry`. |
-| Extension observing all browsing once HTTP-auth filling is on | The permissions it needs are optional, granted by you at runtime, revocable in `about:addons`, and limited to `https:` plus loopback; without them the extension has no host permissions at all. |
-| Page spoofing its origin | The origin is taken from the tab URL in the background script, never from page or content-script input. |
-| Phishing domain (`github.com.evil.example`) | Suffix matching at label boundaries bounded by the Public Suffix List — only `evil.example`'s own entries can match. |
-| Rogue extension talking to the host | `allowed_extensions` in the manifest pins `pw@staldal.nu`; Firefox (and the snap portal) enforces it. |
-| Confined snap browser escaping to read the vault | The snap never gains direct access to `~/pw.scrypt`; it can only ask the portal to launch the named host, gated by `allowed_extensions` and a one-time portal prompt. |
-| Compromised pw extension / browser process | Cannot read the vault file or passphrase; can only issue `get-logins` per origin, and only entries you associated with that site (by `name` or `url`, set from the CLI) are released. It cannot associate new sites (the host is read-only). |
-| Passphrase leakage via process metadata | The passphrase goes from pinentry into a zeroizing buffer and is consumed in-process — never in argv, the environment, or any subprocess. Zeroized after use. |
-| Credentials at rest in the host | Never written to disk; held in host memory only, bounded by `cache_minutes`, zeroized on lock or exit. |
-| Clipboard sniffers | The clipboard is not used anywhere in this flow. |
+| Threat                                                                                                                              | Mitigation                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+|-------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Malicious/XSS'd page harvesting autofill                                                                                            | No fill without a user gesture; no always-on content script; the page cannot trigger the extension. Opt-in HTTP-auth filling is the one gesture-less path, and answers only the challenging site itself (see the rows below).                                                                                                                                                                                                                                                  |
+| Hidden `<img>`/`<iframe>` making the browser submit credentials in the background                                                   | HTTP-auth challenges are answered only for top-level page loads, so no subresource or embedded frame is ever answered — those get the browser's dialog.                                                                                                                                                                                                                                                                                                                        |
+| Attacker-controlled subdomain of a site you have an entry for (takeover, shared hosting, multi-tenant apex) collecting its password | The HTTP-auth path matches the host exactly: `example.com` is not released to `evil.example.com`. Parent-domain matching applies only to a fill you asked for by clicking, on a page in front of you.                                                                                                                                                                                                                                                                          |
+| Site provoking `401`s to pop the chooser up repeatedly                                                                              | The chooser only appears for a top-level load of a host you already have two or more entries for *in the challenged realm*, in the tab you are looking at, with the vault open — and it releases nothing until you click an entry. Dismissing it hands the challenge to the browser's dialog.                                                                                                                                                                                  |
+| Site naming another site's realm to collect its credential                                                                          | The realm only ever narrows a match the host has already made exactly: an entry is released to `nas.example` and no other host, whatever realm is claimed. A realm is a label within a host, never across hosts.                                                                                                                                                                                                                                                               |
+| Site provoking `401`s to nag you into unlocking                                                                                     | A host whose offer you dismiss is not asked about again for five minutes, and the offer needs a top-level load in the active tab. The offer itself releases nothing and reveals nothing about the vault — MyPass cannot tell whether it has an entry for the site until you unlock — and it is only ever an offer: the passphrase prompt takes your click.                                                                                                                     |
+| Page trying to force a master-passphrase prompt                                                                                     | The HTTP-auth path sends `get-logins-strict`, which the host answers with `locked` rather than prompting, so no page load can raise a `pinentry` dialog. The guarantee lives in the host, on the request that would return the credential — not in a separate check the vault could expire behind. The one request that may prompt, `get-logins-strict-unlock`, is sent only from your click on the popup's own unlock button — a page can summon the popup, never `pinentry`. |
+| Extension observing all browsing once HTTP-auth filling is on                                                                       | The permissions it needs are optional, granted by you at runtime, revocable in `about:addons`, and limited to `https:` plus loopback; without them the extension has no host permissions at all.                                                                                                                                                                                                                                                                               |
+| Page spoofing its origin                                                                                                            | The origin is taken from the tab URL in the background script, never from page or content-script input.                                                                                                                                                                                                                                                                                                                                                                        |
+| Phishing domain (`github.com.evil.example`)                                                                                         | Suffix matching at label boundaries bounded by the Public Suffix List — only `evil.example`'s own entries can match.                                                                                                                                                                                                                                                                                                                                                           |
+| Rogue extension talking to the host                                                                                                 | `allowed_extensions` in the manifest pins `mypass@staldal.nu`; Firefox (and the snap portal) enforces it.                                                                                                                                                                                                                                                                                                                                                                      |
+| Confined snap browser escaping to read the vault                                                                                    | The snap never gains direct access to `~/mypass.scrypt`; it can only ask the portal to launch the named host, gated by `allowed_extensions` and a one-time portal prompt.                                                                                                                                                                                                                                                                                                      |
+| Compromised MyPass extension / browser process                                                                                      | Cannot read the vault file or passphrase; can only issue `get-logins` per origin, and only entries you associated with that site (by `name` or `url`, set from the CLI) are released. It cannot associate new sites (the host is read-only).                                                                                                                                                                                                                                   |
+| Passphrase leakage via process metadata                                                                                             | The passphrase goes from pinentry into a zeroizing buffer and is consumed in-process — never in argv, the environment, or any subprocess. Zeroized after use.                                                                                                                                                                                                                                                                                                                  |
+| Credentials at rest in the host                                                                                                     | Never written to disk; held in host memory only, bounded by `cache_minutes`, zeroized on lock or exit.                                                                                                                                                                                                                                                                                                                                                                         |
+| Clipboard sniffers                                                                                                                  | The clipboard is not used anywhere in this flow.                                                                                                                                                                                                                                                                                                                                                                                                                               |
 
 ## File format and recovery
 
@@ -241,20 +241,20 @@ document:
 ```
 
 Because the container is the standard format, the vault can always be
-recovered without `pw`, using the common
+recovered without `mypass`, using the common
 [scrypt](https://www.tarsnap.com/scrypt.html) tool:
 
 ```sh
-scrypt dec ~/pw.scrypt
+scrypt dec ~/mypass.scrypt
 ```
 
-which prints the JSON above. `pw export` does the same from within `pw`.
+which prints the JSON above. `mypass export` does the same from within `mypass`.
 
 Writes are atomic (write-to-temp, fsync, rename), and the previous version of
-the vault is kept as `pw.scrypt.bak` next to it. A crash mid-write can never
-leave a truncated vault. The temporary file is always `pw.scrypt.tmp` next to
+the vault is kept as `mypass.scrypt.bak` next to it. A crash mid-write can never
+leave a truncated vault. The temporary file is always `mypass.scrypt.tmp` next to
 the vault, so a sandbox policy such as AppArmor only needs to allow
-`pw.scrypt`, `pw.scrypt.tmp` and `pw.scrypt.bak`.
+`mypass.scrypt`, `mypass.scrypt.tmp` and `mypass.scrypt.bak`.
 
 ## Security notes
 
@@ -262,29 +262,29 @@ the vault, so a sandbox policy such as AppArmor only needs to allow
   start. **On Windows, file permissions are not restricted** — keep the vault
   in a directory only your user can read.
 - A copied password is removed from the clipboard after `--clear-timeout`
-  seconds (default 20; `pw` waits in the foreground, or removes it at once when
+  seconds (default 20; `mypass` waits in the foreground, or removes it at once when
   you press ENTER), and only if the clipboard still holds it, so anything you
   copy in the meantime is preserved. To reliably evict the password from the
   desktop clipboard manager the slot is overwritten with a single space rather
   than emptied, so the clipboard ends up holding a space, not nothing. **A
   clipboard history manager (GNOME extensions such
   as GPaste or Clipboard Indicator, KDE Klipper, the Windows clipboard
-  history, third-party tools) may keep its own copy that `pw` cannot reach** —
+  history, third-party tools) may keep its own copy that `mypass` cannot reach** —
   disable history for sensitive copies, or use `--show` and pipe the password
   to a consumer you control. With `--clear-timeout 0` the password stays on
   the clipboard until something else overwrites it.
 - Secrets are zeroized in memory when no longer needed, and never appear in
   debug output.
-- On startup `pw` disables core dumps, and on Linux marks itself non-dumpable
+- On startup `mypass` disables core dumps, and on Linux marks itself non-dumpable
   (which also blocks `ptrace` attaches from other same-user processes), so a
   crash cannot persist the derived key or decrypted vault to disk. This does
   **not** protect against swap: while a secret is live, the kernel may page it
   out to swap, where zeroize-on-drop cannot reach it. On a machine that may
   swap, use **encrypted swap** (or disable swap with `swapoff`) to close this
-  gap — it is an OS-level setting `pw` cannot enforce itself.
+  gap — it is an OS-level setting `mypass` cannot enforce itself.
 - You can use the `apparmor-profile` file as a template for an Apparmor profile, you need to substitute 
   `${PATH_TO_EXECUTABLE}` with absolute paths. This has only been tested on Ubuntu Linux.
-  `apparmor-profile-browser-host` is the matching template for the `pw-browser-host`
+  `apparmor-profile-browser-host` is the matching template for the `mypass-browser-host`
   binary (see [Firefox integration](#firefox-integration)); it confines the host
   to reading the vault, reading its config, and launching `pinentry`.
 

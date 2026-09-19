@@ -1,13 +1,13 @@
-// Background script for the pw Firefox extension.
+// Background script for the MyPass Firefox extension.
 //
-// Holds the native-messaging port to `pw-browser-host` and drives the fill
+// Holds the native-messaging port to `mypass-browser-host` and drives the fill
 // flow, plus — when the user has granted the optional permissions for it — the
 // HTTP-authentication flow at the bottom of this file. Contains no crypto and
 // stores no secrets at rest: credentials live in function/Map scope only for as
 // long as a fill is in flight, and nothing is written to browser.storage, the
 // clipboard, or the DOM by this script.
 
-const HOST = "nu.staldal.pw";
+const HOST = "nu.staldal.mypass";
 
 // One long-lived port per background script so the host process — and its
 // in-memory unlock cache — survives across fills (§4.1, §4.3). A fresh port
@@ -86,7 +86,7 @@ function errorMessage(resp) {
     case "db-missing":
       return "No vault file found.";
     default:
-      return resp.message || "The pw host reported an error.";
+      return resp.message || "The MyPass host reported an error.";
   }
 }
 
@@ -100,7 +100,7 @@ async function fillTab(tabId, entry) {
   try {
     await browser.tabs.executeScript(tabId, { file: "/fill.js" });
     result = await browser.tabs.sendMessage(tabId, {
-      type: "pw-fill",
+      type: "mypass-fill",
       username: entry.username,
       password: entry.password,
     });
@@ -162,7 +162,7 @@ async function fillFlow() {
   try {
     resp = await send({ type: "get-logins", origin });
   } catch (e) {
-    return { error: "Cannot reach the pw host: " + e.message };
+    return { error: "Cannot reach the MyPass host: " + e.message };
   }
   if (resp.type === "error") {
     return { error: errorMessage(resp), code: resp.code };
@@ -208,9 +208,9 @@ async function vaultStatus() {
   try {
     resp = await send({ type: "status" });
   } catch (e) {
-    return { error: "Cannot reach the pw host: " + e.message };
+    return { error: "Cannot reach the MyPass host: " + e.message };
   }
-  if (!resp || resp.type !== "status") return { error: "Unexpected reply from the pw host." };
+  if (!resp || resp.type !== "status") return { error: "Unexpected reply from the MyPass host." };
   return { locked: resp.locked };
 }
 
@@ -233,10 +233,10 @@ async function unlockVault() {
   try {
     resp = await send({ type: "unlock" });
   } catch (e) {
-    return { error: "Cannot reach the pw host: " + e.message };
+    return { error: "Cannot reach the MyPass host: " + e.message };
   }
   if (resp.type === "error") return { error: errorMessage(resp), code: resp.code };
-  if (resp.type !== "status") return { error: "Unexpected reply from the pw host." };
+  if (resp.type !== "status") return { error: "Unexpected reply from the MyPass host." };
   unlockOfferDeclined.clear(); // the user has shown they want the vault open
   // Still locked after a successful unlock means the host is configured not to
   // cache (`cache_minutes: 0`), so there was nothing to keep.
@@ -248,9 +248,9 @@ async function lockVault() {
   try {
     resp = await send({ type: "lock" });
   } catch (e) {
-    return { error: "Cannot reach the pw host: " + e.message };
+    return { error: "Cannot reach the MyPass host: " + e.message };
   }
-  if (!resp || resp.type !== "ok") return { error: "Unexpected reply from the pw host." };
+  if (!resp || resp.type !== "ok") return { error: "Unexpected reply from the MyPass host." };
   // Locking means nothing more is released, so a challenge still waiting on a
   // choice is declined too, credentials and all — it falls back to Firefox's
   // own dialog like any other challenge we do not answer. An unlock already
@@ -273,12 +273,12 @@ browser.runtime.onMessage.addListener((msg) => {
 // Context-menu entry routes through the same popup so multi-match selection
 // has somewhere to render.
 browser.menus.create({
-  id: "pw-fill",
-  title: "Fill login with pw",
+  id: "mypass-fill",
+  title: "Fill login with MyPass",
   contexts: ["page", "editable"],
 });
 browser.menus.onClicked.addListener((info) => {
-  if (info.menuItemId === "pw-fill") {
+  if (info.menuItemId === "mypass-fill") {
     browser.browserAction.openPopup().catch(() => {});
   }
 });
@@ -512,7 +512,7 @@ async function unlockAuth(tabId) {
     });
   } catch (e) {
     settleAuthChoice(tabId, null);
-    return { error: "Cannot reach the pw host: " + e.message };
+    return { error: "Cannot reach the MyPass host: " + e.message };
   }
 
   // pinentry can stand for minutes, and the challenge may not have survived
@@ -579,7 +579,7 @@ async function unlockAuth(tabId) {
 let popupOpen = false;
 
 browser.runtime.onConnect.addListener((popupPort) => {
-  if (popupPort.name !== "pw-popup") return;
+  if (popupPort.name !== "mypass-popup") return;
   popupOpen = true;
   popupPort.onDisconnect.addListener(() => {
     popupOpen = false;

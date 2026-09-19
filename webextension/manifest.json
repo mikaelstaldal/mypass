@@ -1,11 +1,11 @@
 {
   "manifest_version": 2,
-  "name": "pw",
-  "version": "0.6.0",
-  "description": "Fill logins from the pw password manager, without the clipboard.",
+  "name": "MyPass",
+  "version": "0.8.0",
+  "description": "Fill logins from the MyPass password manager, without the clipboard.",
   "browser_specific_settings": {
     "gecko": {
-      "id": "pw@staldal.nu",
+      "id": "mypass@staldal.nu",
       "strict_min_version": "142.0",
       "data_collection_permissions": {
         "required": ["none"]
@@ -33,19 +33,19 @@
     "persistent": true
   },
   "icons": {
-    "16": "icons/pw16.png",
-    "32": "icons/pw32.png",
-    "48": "icons/pw48.png",
-    "96": "icons/pw96.png"
+    "16": "icons/mypass16.png",
+    "32": "icons/mypass32.png",
+    "48": "icons/mypass48.png",
+    "96": "icons/mypass96.png"
   },
   "browser_action": {
-    "default_title": "Fill login with pw",
+    "default_title": "Fill login with MyPass",
     "default_popup": "popup.html",
     "default_icon": {
-      "16": "icons/pw16.png",
-      "32": "icons/pw32.png",
-      "48": "icons/pw48.png",
-      "96": "icons/pw96.png"
+      "16": "icons/mypass16.png",
+      "32": "icons/mypass32.png",
+      "48": "icons/mypass48.png",
+      "96": "icons/mypass96.png"
     }
   },
   "commands": {
@@ -53,7 +53,7 @@
       "suggested_key": {
         "default": "Ctrl+Alt+L"
       },
-      "description": "Fill login with pw"
+      "description": "Fill login with MyPass"
     }
   }
 }

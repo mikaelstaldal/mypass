@@ -1,7 +1,7 @@
 //! Opt-in debug logging to a file, for diagnosing the native-messaging
 //! integration when it cannot be run from a terminal (the host's stderr goes
 //! nowhere under Firefox). Disabled unless a log path is configured, either by
-//! `log_file` in `~/.config/pw/browser.json` or the `$PW_BROWSER_LOG`
+//! `log_file` in `~/.config/mypass/browser.json` or the `$MYPASS_BROWSER_LOG`
 //! environment variable.
 //!
 //! It must never record secrets: callers log protocol structure only, and the

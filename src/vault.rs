@@ -60,7 +60,7 @@ pub enum Error {
     Format(#[from] scrypt_format::Error),
     #[error("invalid vault content")]
     InvalidJson(#[source] serde_json::Error),
-    #[error("vault format version {0} is newer than this version of pw understands")]
+    #[error("vault format version {0} is newer than this version of MyPass understands")]
     UnsupportedVersion(u32),
 }
 

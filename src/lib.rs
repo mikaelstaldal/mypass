@@ -1,4 +1,4 @@
-//! # PW
+//! # MyPass
 //!
 //! A command line password manager.
 //!
@@ -30,16 +30,16 @@ pub const MAX_NAME_LEN: usize = 256;
 pub const MAX_PASSWORD_LEN: u32 = 1024;
 
 #[derive(thiserror::Error, Debug)]
-pub enum PwError {
-    #[error("no vault at {0} - run `pw init`")]
+pub enum MyPassError {
+    #[error("no vault at {0} - run `mypass init`")]
     FileNotFound(PathBuf),
     #[error("vault {0} already exists")]
     FileAlreadyExists(PathBuf),
     #[error("incorrect passphrase")]
     WrongPassphrase,
-    #[error("no entry '{name}' in {file} - try `pw list`")]
+    #[error("no entry '{name}' in {file} - try `mypass list`")]
     NotFound { name: String, file: PathBuf },
-    #[error("entry '{name}' already exists in {file} - use `pw update`")]
+    #[error("entry '{name}' already exists in {file} - use `mypass update`")]
     AlreadyExists { name: String, file: PathBuf },
     #[error("invalid {what}: {reason}")]
     InvalidInput { what: &'static str, reason: String },
@@ -122,27 +122,27 @@ pub struct PasswordEntry {
 }
 
 /// Create a new empty vault. Fails if the file already exists.
-pub fn init(file: &Path, passphrase: &Passphrase, params: &Params) -> Result<(), PwError> {
+pub fn init(file: &Path, passphrase: &Passphrase, params: &Params) -> Result<(), MyPassError> {
     if file.exists() {
-        return Err(PwError::FileAlreadyExists(file.to_path_buf()));
+        return Err(MyPassError::FileAlreadyExists(file.to_path_buf()));
     }
     store(file, passphrase, &[], params)
 }
 
 /// Look up the entry named `name`.
-pub fn get(file: &Path, passphrase: &Passphrase, name: &str) -> Result<PasswordEntry, PwError> {
+pub fn get(file: &Path, passphrase: &Passphrase, name: &str) -> Result<PasswordEntry, MyPassError> {
     let entries = load(file, passphrase)?;
     entries
         .into_iter()
         .find(|e| e.name == name)
-        .ok_or_else(|| PwError::NotFound {
+        .ok_or_else(|| MyPassError::NotFound {
             name: name.to_string(),
             file: file.to_path_buf(),
         })
 }
 
 /// All entries in the vault.
-pub fn list(file: &Path, passphrase: &Passphrase) -> Result<Vec<PasswordEntry>, PwError> {
+pub fn list(file: &Path, passphrase: &Passphrase) -> Result<Vec<PasswordEntry>, MyPassError> {
     load(file, passphrase)
 }
 
@@ -152,11 +152,11 @@ pub fn add(
     passphrase: &Passphrase,
     new_entry: PasswordEntry,
     params: &Params,
-) -> Result<(), PwError> {
+) -> Result<(), MyPassError> {
     validate_entry(&new_entry)?;
     let mut entries = load(file, passphrase)?;
     if entries.iter().any(|e| e.name == new_entry.name) {
-        return Err(PwError::AlreadyExists {
+        return Err(MyPassError::AlreadyExists {
             name: new_entry.name.clone(),
             file: file.to_path_buf(),
         });
@@ -171,11 +171,11 @@ pub fn update(
     passphrase: &Passphrase,
     new_entry: PasswordEntry,
     params: &Params,
-) -> Result<(), PwError> {
+) -> Result<(), MyPassError> {
     validate_entry(&new_entry)?;
     let mut entries = load(file, passphrase)?;
     let Some(entry) = entries.iter_mut().find(|e| e.name == new_entry.name) else {
-        return Err(PwError::NotFound {
+        return Err(MyPassError::NotFound {
             name: new_entry.name.clone(),
             file: file.to_path_buf(),
         });
@@ -195,13 +195,13 @@ pub fn update_keep_password(
     url: Option<String>,
     realm: Option<String>,
     params: &Params,
-) -> Result<(), PwError> {
+) -> Result<(), MyPassError> {
     validate_name(name)?;
     validate_username(&username)?;
     validate_site(url.as_deref(), realm.as_deref())?;
     let mut entries = load(file, passphrase)?;
     let Some(entry) = entries.iter_mut().find(|e| e.name == name) else {
-        return Err(PwError::NotFound {
+        return Err(MyPassError::NotFound {
             name: name.to_string(),
             file: file.to_path_buf(),
         });
@@ -218,12 +218,12 @@ pub fn remove(
     passphrase: &Passphrase,
     name: &str,
     params: &Params,
-) -> Result<(), PwError> {
+) -> Result<(), MyPassError> {
     let mut entries = load(file, passphrase)?;
     let original_len = entries.len();
     entries.retain(|e| e.name != name);
     if entries.len() == original_len {
-        return Err(PwError::NotFound {
+        return Err(MyPassError::NotFound {
             name: name.to_string(),
             file: file.to_path_buf(),
         });
@@ -233,14 +233,14 @@ pub fn remove(
 
 /// The decrypted vault as JSON (the same envelope that is stored encrypted),
 /// for backup and migration.
-pub fn export(file: &Path, passphrase: &Passphrase) -> Result<Zeroizing<String>, PwError> {
+pub fn export(file: &Path, passphrase: &Passphrase) -> Result<Zeroizing<String>, MyPassError> {
     let entries = load(file, passphrase)?;
     vault::to_json(&entries).map_err(|e| vault_err(file, e))
 }
 
-fn load(file: &Path, passphrase: &Passphrase) -> Result<Vec<PasswordEntry>, PwError> {
+fn load(file: &Path, passphrase: &Passphrase) -> Result<Vec<PasswordEntry>, MyPassError> {
     if !file.exists() {
-        return Err(PwError::FileNotFound(file.to_path_buf()));
+        return Err(MyPassError::FileNotFound(file.to_path_buf()));
     }
     vault::load(file, passphrase).map_err(|e| vault_err(file, e))
 }
@@ -250,15 +250,15 @@ fn store(
     passphrase: &Passphrase,
     entries: &[PasswordEntry],
     params: &Params,
-) -> Result<(), PwError> {
+) -> Result<(), MyPassError> {
     vault::store(file, passphrase, entries, params).map_err(|e| vault_err(file, e))
 }
 
-fn vault_err(file: &Path, err: vault::Error) -> PwError {
+fn vault_err(file: &Path, err: vault::Error) -> MyPassError {
     match err {
-        vault::Error::Format(scrypt_format::Error::WrongPassphrase) => PwError::WrongPassphrase,
-        e @ (vault::Error::Read { .. } | vault::Error::Write { .. }) => PwError::Io(e),
-        e => PwError::CorruptVault {
+        vault::Error::Format(scrypt_format::Error::WrongPassphrase) => MyPassError::WrongPassphrase,
+        e @ (vault::Error::Read { .. } | vault::Error::Write { .. }) => MyPassError::Io(e),
+        e => MyPassError::CorruptVault {
             file: file.to_path_buf(),
             source: e,
         },
@@ -289,9 +289,9 @@ pub fn is_display_spoofing_char(c: char) -> bool {
 /// Entry names must be non-empty, at most [`MAX_NAME_LEN`] characters and
 /// free of control, bidirectional and zero-width characters. Everything a
 /// hostname can contain is allowed.
-pub fn validate_name(name: &str) -> Result<(), PwError> {
+pub fn validate_name(name: &str) -> Result<(), MyPassError> {
     if name.is_empty() {
-        return Err(PwError::InvalidInput {
+        return Err(MyPassError::InvalidInput {
             what: "entry name",
             reason: "must not be empty".to_string(),
         });
@@ -301,16 +301,16 @@ pub fn validate_name(name: &str) -> Result<(), PwError> {
 
 /// Usernames may be empty, but obey the same length and character rules as
 /// entry names.
-pub fn validate_username(username: &str) -> Result<(), PwError> {
+pub fn validate_username(username: &str) -> Result<(), MyPassError> {
     validate_text("username", username)
 }
 
 /// The optional `url` matching hint, when present, must be non-empty and obey
 /// the same length and character rules as entry names. Callers map "no url"
 /// to `None`, so an empty string is rejected rather than stored.
-pub fn validate_url(url: &str) -> Result<(), PwError> {
+pub fn validate_url(url: &str) -> Result<(), MyPassError> {
     if url.is_empty() {
-        return Err(PwError::InvalidInput {
+        return Err(MyPassError::InvalidInput {
             what: "url",
             reason: "must not be empty".to_string(),
         });
@@ -321,9 +321,9 @@ pub fn validate_url(url: &str) -> Result<(), PwError> {
 /// The optional `realm` matching hint, when present, must be non-empty and
 /// obey the same length and character rules as entry names. Callers map "no
 /// realm" to `None`, so an empty string is rejected rather than stored.
-pub fn validate_realm(realm: &str) -> Result<(), PwError> {
+pub fn validate_realm(realm: &str) -> Result<(), MyPassError> {
     if realm.is_empty() {
-        return Err(PwError::InvalidInput {
+        return Err(MyPassError::InvalidInput {
             what: "realm",
             reason: "must not be empty".to_string(),
         });
@@ -334,14 +334,14 @@ pub fn validate_realm(realm: &str) -> Result<(), PwError> {
 /// Validate the pair of site-matching hints. A `realm` names one protection
 /// space *on a host*, so it can only narrow a `url`; on its own it would
 /// silently never match anything, which is worth refusing rather than storing.
-fn validate_site(url: Option<&str>, realm: Option<&str>) -> Result<(), PwError> {
+fn validate_site(url: Option<&str>, realm: Option<&str>) -> Result<(), MyPassError> {
     if let Some(url) = url {
         validate_url(url)?;
     }
     if let Some(realm) = realm {
         validate_realm(realm)?;
         if url.is_none() {
-            return Err(PwError::InvalidInput {
+            return Err(MyPassError::InvalidInput {
                 what: "realm",
                 reason: "needs a url: a realm names a protection space on a site".to_string(),
             });
@@ -351,27 +351,27 @@ fn validate_site(url: Option<&str>, realm: Option<&str>) -> Result<(), PwError> 
 }
 
 /// Validate the user-supplied fields of an entry before it is stored.
-fn validate_entry(entry: &PasswordEntry) -> Result<(), PwError> {
+fn validate_entry(entry: &PasswordEntry) -> Result<(), MyPassError> {
     validate_name(&entry.name)?;
     validate_username(&entry.username)?;
     validate_site(entry.url.as_deref(), entry.realm.as_deref())
 }
 
-fn validate_text(what: &'static str, value: &str) -> Result<(), PwError> {
+fn validate_text(what: &'static str, value: &str) -> Result<(), MyPassError> {
     if value.chars().count() > MAX_NAME_LEN {
-        return Err(PwError::InvalidInput {
+        return Err(MyPassError::InvalidInput {
             what,
             reason: format!("longer than {MAX_NAME_LEN} characters"),
         });
     }
     if value.chars().any(char::is_control) {
-        return Err(PwError::InvalidInput {
+        return Err(MyPassError::InvalidInput {
             what,
             reason: "contains control characters".to_string(),
         });
     }
     if value.chars().any(is_display_spoofing_char) {
-        return Err(PwError::InvalidInput {
+        return Err(MyPassError::InvalidInput {
             what,
             reason: "contains bidirectional or zero-width characters".to_string(),
         });
@@ -537,9 +537,9 @@ fn host_matches(host: &str, name: &str, min_labels: usize) -> bool {
 /// Generate a random password of `length` characters from `charset`,
 /// using a cryptographically secure generator. Charset characters are Unicode
 /// scalar values, and each value must occur exactly once.
-pub fn generate_password(length: u32, charset: &str) -> Result<Secret, PwError> {
+pub fn generate_password(length: u32, charset: &str) -> Result<Secret, MyPassError> {
     if length == 0 || length > MAX_PASSWORD_LEN {
-        return Err(PwError::InvalidInput {
+        return Err(MyPassError::InvalidInput {
             what: "password length",
             reason: format!("must be between 1 and {MAX_PASSWORD_LEN}"),
         });
@@ -547,13 +547,13 @@ pub fn generate_password(length: u32, charset: &str) -> Result<Secret, PwError> 
     let chars: Vec<char> = charset.chars().collect();
     let unique: HashSet<char> = chars.iter().copied().collect();
     if unique.len() < 2 {
-        return Err(PwError::InvalidInput {
+        return Err(MyPassError::InvalidInput {
             what: "password charset",
             reason: "must contain at least 2 distinct characters".to_string(),
         });
     }
     if unique.len() != chars.len() {
-        return Err(PwError::InvalidInput {
+        return Err(MyPassError::InvalidInput {
             what: "password charset",
             reason: "must not contain duplicate characters".to_string(),
         });
@@ -613,7 +613,7 @@ mod tests {
     fn init_refuses_existing_file() {
         let (_dir, file) = new_vault(&[]);
         let err = init(&file, &passphrase(), &TEST_PARAMS).unwrap_err();
-        assert!(matches!(err, PwError::FileAlreadyExists(_)));
+        assert!(matches!(err, MyPassError::FileAlreadyExists(_)));
     }
 
     #[test]
@@ -627,14 +627,14 @@ mod tests {
     fn get_unknown_name() {
         let (_dir, file) = new_vault(&[("a", "pw-a")]);
         let err = get(&file, &passphrase(), "nope").unwrap_err();
-        assert!(matches!(err, PwError::NotFound { name, .. } if name == "nope"));
+        assert!(matches!(err, MyPassError::NotFound { name, .. } if name == "nope"));
     }
 
     #[test]
     fn add_duplicate_name() {
         let (_dir, file) = new_vault(&[("a", "pw-a")]);
         let err = add(&file, &passphrase(), entry("a", "other"), &TEST_PARAMS).unwrap_err();
-        assert!(matches!(err, PwError::AlreadyExists { name, .. } if name == "a"));
+        assert!(matches!(err, MyPassError::AlreadyExists { name, .. } if name == "a"));
     }
 
     #[test]
@@ -651,7 +651,7 @@ mod tests {
     fn update_unknown_name() {
         let (_dir, file) = new_vault(&[]);
         let err = update(&file, &passphrase(), entry("a", "pw"), &TEST_PARAMS).unwrap_err();
-        assert!(matches!(err, PwError::NotFound { .. }));
+        assert!(matches!(err, MyPassError::NotFound { .. }));
     }
 
     #[test]
@@ -670,7 +670,7 @@ mod tests {
     fn remove_unknown_name() {
         let (_dir, file) = new_vault(&[]);
         let err = remove(&file, &passphrase(), "a", &TEST_PARAMS).unwrap_err();
-        assert!(matches!(err, PwError::NotFound { .. }));
+        assert!(matches!(err, MyPassError::NotFound { .. }));
     }
 
     #[test]
@@ -682,7 +682,7 @@ mod tests {
             list(&file, &passphrase()).map(|_| ()).unwrap_err(),
             add(&file, &passphrase(), entry("a", "pw"), &TEST_PARAMS).unwrap_err(),
         ] {
-            assert!(matches!(err, PwError::FileNotFound(_)));
+            assert!(matches!(err, MyPassError::FileNotFound(_)));
         }
     }
 
@@ -690,7 +690,7 @@ mod tests {
     fn wrong_passphrase_is_distinct() {
         let (_dir, file) = new_vault(&[]);
         let err = list(&file, &Passphrase::new("wrong".to_string())).unwrap_err();
-        assert!(matches!(err, PwError::WrongPassphrase));
+        assert!(matches!(err, MyPassError::WrongPassphrase));
     }
 
     #[test]
@@ -707,7 +707,10 @@ mod tests {
         let (_dir, file) = new_vault(&[]);
         for name in ["", "with\nnewline", "with\x1b[31mescape", &"x".repeat(257)] {
             let err = add(&file, &passphrase(), entry(name, "pw"), &TEST_PARAMS).unwrap_err();
-            assert!(matches!(err, PwError::InvalidInput { .. }), "name {name:?}");
+            assert!(
+                matches!(err, MyPassError::InvalidInput { .. }),
+                "name {name:?}"
+            );
         }
     }
 
@@ -733,7 +736,7 @@ mod tests {
             realm: None,
         };
         let err = add(&file, &passphrase(), bad, &TEST_PARAMS).unwrap_err();
-        assert!(matches!(err, PwError::InvalidInput { .. }));
+        assert!(matches!(err, MyPassError::InvalidInput { .. }));
     }
 
     #[test]
@@ -748,11 +751,14 @@ mod tests {
             "a\u{FEFF}b",
         ] {
             assert!(
-                matches!(validate_name(spoof), Err(PwError::InvalidInput { .. })),
+                matches!(validate_name(spoof), Err(MyPassError::InvalidInput { .. })),
                 "name {spoof:?}"
             );
             assert!(
-                matches!(validate_username(spoof), Err(PwError::InvalidInput { .. })),
+                matches!(
+                    validate_username(spoof),
+                    Err(MyPassError::InvalidInput { .. })
+                ),
                 "username {spoof:?}"
             );
         }
@@ -783,14 +789,14 @@ mod tests {
     fn generate_rejects_bad_input() {
         assert!(matches!(
             generate_password(0, "abc").unwrap_err(),
-            PwError::InvalidInput {
+            MyPassError::InvalidInput {
                 what: "password length",
                 ..
             }
         ));
         assert!(matches!(
             generate_password(2000, "abc").unwrap_err(),
-            PwError::InvalidInput {
+            MyPassError::InvalidInput {
                 what: "password length",
                 ..
             }
@@ -798,7 +804,7 @@ mod tests {
         for charset in ["", "a", "aaaa"] {
             assert!(matches!(
                 generate_password(8, charset).unwrap_err(),
-                PwError::InvalidInput {
+                MyPassError::InvalidInput {
                     what: "password charset",
                     ..
                 }
@@ -808,7 +814,7 @@ mod tests {
         for charset in ["aab", "😀😀😺"] {
             assert!(matches!(
                 generate_password(8, charset).unwrap_err(),
-                PwError::InvalidInput {
+                MyPassError::InvalidInput {
                     what: "password charset",
                     reason,
                 } if reason == "must not contain duplicate characters"
@@ -1181,7 +1187,10 @@ mod tests {
             realm: Some("Admin".to_string()),
         };
         let err = add(&file, &passphrase(), bad, &TEST_PARAMS).unwrap_err();
-        assert!(matches!(err, PwError::InvalidInput { what: "realm", .. }));
+        assert!(matches!(
+            err,
+            MyPassError::InvalidInput { what: "realm", .. }
+        ));
     }
 
     #[test]
@@ -1195,7 +1204,10 @@ mod tests {
             realm: Some("with\nnewline".to_string()),
         };
         let err = add(&file, &passphrase(), bad, &TEST_PARAMS).unwrap_err();
-        assert!(matches!(err, PwError::InvalidInput { what: "realm", .. }));
+        assert!(matches!(
+            err,
+            MyPassError::InvalidInput { what: "realm", .. }
+        ));
     }
 
     #[test]
@@ -1209,7 +1221,7 @@ mod tests {
             realm: None,
         };
         let err = add(&file, &passphrase(), bad, &TEST_PARAMS).unwrap_err();
-        assert!(matches!(err, PwError::InvalidInput { what: "url", .. }));
+        assert!(matches!(err, MyPassError::InvalidInput { what: "url", .. }));
     }
 
     #[test]
@@ -1246,7 +1258,7 @@ mod tests {
             &TEST_PARAMS,
         )
         .unwrap_err();
-        assert!(matches!(err, PwError::NotFound { .. }));
+        assert!(matches!(err, MyPassError::NotFound { .. }));
     }
 
     #[test]

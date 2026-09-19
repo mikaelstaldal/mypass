@@ -1,9 +1,9 @@
 #include <tunables/global>
 
-profile pw-browser-host ${PATH_TO_EXECUTABLE}/pw-browser-host {
+profile mypass-browser-host ${PATH_TO_EXECUTABLE}/mypass-browser-host {
     #include <abstractions/base>
 
-    ${PATH_TO_EXECUTABLE}/pw-browser-host rm,
+    ${PATH_TO_EXECUTABLE}/mypass-browser-host rm,
 
     # Prompt for the master passphrase outside the browser. pinentry runs
     # unconfined: Ux scrubs only the loader-sensitive environment variables, so
@@ -15,10 +15,10 @@ profile pw-browser-host ${PATH_TO_EXECUTABLE}/pw-browser-host {
 
     # The vault is opened read-only; this host never writes anything. Adjust
     # the path if `file` in browser.json points elsewhere.
-    owner @{HOME}/pw.scrypt r,
+    owner @{HOME}/mypass.scrypt r,
 
     # Config is read-only. The vault (including each entry's site `url`) is
-    # written only by the `pw` CLI, so the host needs no write access at all.
-    owner @{HOME}/.config/pw/ r,
-    owner @{HOME}/.config/pw/browser.json r,
+    # written only by the `mypass` CLI, so the host needs no write access at all.
+    owner @{HOME}/.config/mypass/ r,
+    owner @{HOME}/.config/mypass/browser.json r,
 }
