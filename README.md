@@ -1,8 +1,12 @@
-# MyPass — a command line password manager
+# MyPass — a password manager
 
 `mypass` keeps your passwords in a single encrypted file (`~/mypass.scrypt` by
 default). All cryptography happens in-process; there are no runtime
 dependencies on external programs.
+
+## Other variants
+
+There is also a [native Android app](https://github.com/mikaelstaldal/mypass-android)
 
 ## Installation
 
