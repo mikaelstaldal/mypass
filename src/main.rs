@@ -12,12 +12,14 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context};
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, CommandFactory, Parser, Subcommand};
 use clippers::Clipboard;
 use dirs::home_dir;
 use zeroize::Zeroizing;
 
 use mypass::{Params, Passphrase, PasswordEntry, Secret};
+
+mod tui;
 
 const DEFAULT_CHARSET: &str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-";
 
@@ -43,7 +45,7 @@ struct Cli {
     scrypt_log_n: Option<u8>,
 
     #[command(subcommand)]
-    command: Commands,
+    command: Option<Commands>,
 }
 
 #[derive(Args)]
@@ -174,13 +176,10 @@ enum Commands {
 
 fn main() -> ExitCode {
     harden_process();
-    match run() {
-        Ok(code) => code,
-        Err(err) => {
-            eprintln!("error: {err:#}");
-            ExitCode::FAILURE
-        }
-    }
+    run().unwrap_or_else(|err| {
+        eprintln!("error: {err:#}");
+        ExitCode::FAILURE
+    })
 }
 
 /// Reverse-DNS name of the native-messaging host, used as the manifest
@@ -247,7 +246,7 @@ fn native_messaging_manifest(host_path: &Path) -> anyhow::Result<String> {
         .to_str()
         .context("the host binary path is not valid UTF-8")?;
     if !host_path.is_absolute() {
-        anyhow::bail!("the host binary path {path} is not absolute");
+        bail!("the host binary path {path} is not absolute");
     }
     let manifest = serde_json::json!({
         "name": HOST_MANIFEST_NAME,
@@ -366,12 +365,12 @@ fn run() -> anyhow::Result<ExitCode> {
     let mut pending_clear: Option<Zeroizing<String>> = None;
 
     match cli.command {
-        Commands::Init {} => {
+        Some(Commands::Init {}) => {
             let passphrase = obtain_passphrase(cli.passphrase_stdin, true)?;
             mypass::init(&file, &passphrase, &params)?;
             println!("Initialized empty vault at {}", file.display());
         }
-        Commands::Get { name, show } => {
+        Some(Commands::Get { name, show }) => {
             let passphrase = obtain_passphrase(cli.passphrase_stdin, false)?;
             let entry = mypass::get(&file, &passphrase, &name)?;
             if !entry.username.is_empty() {
@@ -396,7 +395,7 @@ fn run() -> anyhow::Result<ExitCode> {
                 );
             }
         }
-        Commands::List { pattern } => {
+        Some(Commands::List { pattern }) => {
             let passphrase = obtain_passphrase(cli.passphrase_stdin, false)?;
             let entries = mypass::list(&file, &passphrase)?;
             println!("Vault: {} ({} entries)", file.display(), entries.len());
@@ -408,14 +407,14 @@ fn run() -> anyhow::Result<ExitCode> {
                 println!("{}: {}", sanitize(&entry.name), sanitize(&entry.username));
             }
         }
-        Commands::Add {
+        Some(Commands::Add {
             name,
             username,
             url,
             realm,
             password,
             show,
-        } => {
+        }) => {
             let password = obtain_password(&password)?;
             let passphrase = obtain_passphrase(cli.passphrase_stdin, false)?;
             if show {
@@ -438,7 +437,7 @@ fn run() -> anyhow::Result<ExitCode> {
                 );
             }
         }
-        Commands::Update {
+        Some(Commands::Update {
             name,
             username,
             url,
@@ -446,7 +445,7 @@ fn run() -> anyhow::Result<ExitCode> {
             keep_password,
             password,
             show,
-        } => {
+        }) => {
             if keep_password {
                 let passphrase = obtain_passphrase(cli.passphrase_stdin, false)?;
                 mypass::update_keep_password(
@@ -483,7 +482,7 @@ fn run() -> anyhow::Result<ExitCode> {
                 }
             }
         }
-        Commands::Remove { name, yes } => {
+        Some(Commands::Remove { name, yes }) => {
             if !yes && !confirm(&format!("Remove entry '{}'? [y/N] ", sanitize(&name)))? {
                 eprintln!("Aborted.");
                 return Ok(ExitCode::FAILURE);
@@ -492,11 +491,11 @@ fn run() -> anyhow::Result<ExitCode> {
             mypass::remove(&file, &passphrase, &name, &params)?;
             println!("Removed entry '{}'.", sanitize(&name));
         }
-        Commands::Generate {
+        Some(Commands::Generate {
             password_length,
             password_charset,
             show,
-        } => {
+        }) => {
             let password = generate(password_length, &password_charset)?;
             if show {
                 println!("{}", password.expose());
@@ -505,7 +504,7 @@ fn run() -> anyhow::Result<ExitCode> {
                 announce_copied("Generated password", clear_timeout);
             }
         }
-        Commands::Show { name } => {
+        Some(Commands::Show { name }) => {
             let passphrase = obtain_passphrase(cli.passphrase_stdin, false)?;
             let entry = mypass::get(&file, &passphrase, &name)?;
             println!("name: {}", sanitize(&entry.name));
@@ -519,18 +518,29 @@ fn run() -> anyhow::Result<ExitCode> {
                 println!("realm: {}", sanitize(realm));
             }
         }
-        Commands::Export {} => {
+        Some(Commands::Export {}) => {
             let passphrase = obtain_passphrase(cli.passphrase_stdin, false)?;
             let json = mypass::export(&file, &passphrase)?;
             eprintln!("Warning: the decrypted vault follows on stdout.");
             println!("{}", json.as_str());
         }
-        Commands::InstallBrowser {
+        Some(Commands::InstallBrowser {
             uninstall,
             snap,
             no_snap,
-        } => {
+        }) => {
             install_browser(uninstall, snap, no_snap)?;
+        }
+        None => {
+            if io::stdin().is_terminal() && io::stdout().is_terminal() && io::stderr().is_terminal() {
+                if cli.passphrase_stdin {
+                    bail!("--passphrase-stdin cannot be used with the interactive TUI");
+                }
+                tui::run(&file, &params, clear_timeout)?;
+            } else {
+                Cli::command().print_help()?;
+                return Ok(ExitCode::FAILURE);
+            }
         }
     }
 

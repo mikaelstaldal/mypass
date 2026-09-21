@@ -21,6 +21,7 @@ mypass init                      # create an empty vault at ~/mypass.scrypt
 mypass add github.com mikael     # generate a password for an entry, copy it to the clipboard
 mypass get github.com            # copy the password to the clipboard again
 mypass list                      # show all entries
+mypass tui                       # browse and edit interactively
 ```
 
 ## Commands
@@ -35,6 +36,7 @@ mypass list                      # show all entries
 | `mypass remove <name> [--yes]`              | Remove an entry, after confirmation (`--yes` skips it).                                                        |
 | `mypass generate [options]`                 | Generate a password without storing it.                                                                        |
 | `mypass export`                             | Print the decrypted vault as JSON on stdout, for backup or migration.                                          |
+| `mypass tui`                                | Browse, create, update and delete entries in an interactive terminal.                                          |
 | `mypass install-browser [--uninstall]`      | Install (or remove) the Firefox native-messaging manifest for the browser integration. See below.              |
 
 Options for `add`, `update` and `generate`:
@@ -69,6 +71,16 @@ Global options:
 The *username* is a free-form label stored alongside the password; it may be
 omitted. Generated passwords use a cryptographically secure random number
 generator (ChaCha20, OS-seeded) without modulo bias.
+
+### Interactive TUI
+
+`mypass tui` unlocks the vault once at startup and lets you make several
+changes before writing anything. Use the arrow keys (or `j`/`k`) to browse,
+`c` to copy the selected password, `n` to create, `e` to edit and `d` to
+delete. Press `q` to exit. If the vault has changed, choose to save or discard
+the entire editing session. Saving asks for the master passphrase again and
+atomically replaces the vault, retaining the usual `.bak` backup. Passwords
+remain masked in the interface.
 
 ## Firefox integration
 

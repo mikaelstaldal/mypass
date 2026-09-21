@@ -1,6 +1,6 @@
 [package]
 name = "mypass"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2021"
 description = "MyPass command line password manager"
 license = "Apache-2.0"
@@ -27,6 +27,8 @@ clap = { version = "~4.6.1", features = ["derive"] }
 clippers = "~0.1.2"
 dirs = "~6.0.0"
 rpassword = "7.5.4"
+ratatui = { version = "~0.30.2", default-features = false, features = ["crossterm"] }
+crossterm = "~0.29.0"
 
 [[bin]]
 name = "mypass"

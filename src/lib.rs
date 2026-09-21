@@ -146,6 +146,32 @@ pub fn list(file: &Path, passphrase: &Passphrase) -> Result<Vec<PasswordEntry>, 
     load(file, passphrase)
 }
 
+/// Replace all entries in an existing vault.
+///
+/// The vault is first opened with `passphrase`, both to verify it and to avoid
+/// accidentally replacing a vault encrypted with a different passphrase.
+/// This is useful for interactive clients which edit several entries in
+/// memory and commit them as one operation.
+pub fn replace_all(
+    file: &Path,
+    passphrase: &Passphrase,
+    entries: &[PasswordEntry],
+    params: &Params,
+) -> Result<(), MyPassError> {
+    drop(load(file, passphrase)?);
+    let mut names = HashSet::with_capacity(entries.len());
+    for entry in entries {
+        validate_entry(entry)?;
+        if !names.insert(entry.name.as_str()) {
+            return Err(MyPassError::AlreadyExists {
+                name: entry.name.clone(),
+                file: file.to_path_buf(),
+            });
+        }
+    }
+    store(file, passphrase, entries, params)
+}
+
 /// Add a new entry. Fails if an entry with the same name exists.
 pub fn add(
     file: &Path,
@@ -1259,6 +1285,49 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(err, MyPassError::NotFound { .. }));
+    }
+
+    #[test]
+    fn replace_all_commits_a_batch_after_verifying_passphrase() {
+        let (_dir, file) = new_vault(&[("old", "pw-old")]);
+        let entries = vec![entry("new", "pw-new")];
+        replace_all(&file, &passphrase(), &entries, &TEST_PARAMS).unwrap();
+        assert!(matches!(
+            get(&file, &passphrase(), "old"),
+            Err(MyPassError::NotFound { .. })
+        ));
+        assert_eq!(get(&file, &passphrase(), "new").unwrap(), entries[0]);
+    }
+
+    #[test]
+    fn replace_all_wrong_passphrase_leaves_vault_unchanged() {
+        let (_dir, file) = new_vault(&[("old", "pw-old")]);
+        let err = replace_all(
+            &file,
+            &Passphrase::new("wrong".to_string()),
+            &[entry("new", "pw-new")],
+            &TEST_PARAMS,
+        )
+        .unwrap_err();
+        assert!(matches!(err, MyPassError::WrongPassphrase));
+        assert_eq!(
+            get(&file, &passphrase(), "old").unwrap().password,
+            "pw-old".into()
+        );
+    }
+
+    #[test]
+    fn replace_all_rejects_duplicate_names() {
+        let (_dir, file) = new_vault(&[("old", "pw-old")]);
+        let err = replace_all(
+            &file,
+            &passphrase(),
+            &[entry("same", "one"), entry("same", "two")],
+            &TEST_PARAMS,
+        )
+        .unwrap_err();
+        assert!(matches!(err, MyPassError::AlreadyExists { .. }));
+        assert!(get(&file, &passphrase(), "old").is_ok());
     }
 
     #[test]

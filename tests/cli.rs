@@ -71,6 +71,20 @@ fn get_fails_if_vault_does_not_exist() {
 }
 
 #[test]
+fn tui_rejects_passphrase_stdin() {
+    let dir = TempDir::new().unwrap();
+    let vault = init_vault(&dir);
+    pw(&vault)
+        .arg("tui")
+        .write_stdin(PASSPHRASE)
+        .assert()
+        .failure()
+        .stderr(contains(
+            "--passphrase-stdin cannot be used with the interactive TUI",
+        ));
+}
+
+#[test]
 fn add_then_get_round_trip() {
     let dir = TempDir::new().unwrap();
     let vault = init_vault(&dir);

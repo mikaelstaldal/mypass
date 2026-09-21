@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.9.0 (2026-09-21)
+
+- Adding a TUI.
+
 ## 0.8.0 (2026-09-19)
 
 - Renamed the command, Rust crate, browser host, default vault/config paths, and
