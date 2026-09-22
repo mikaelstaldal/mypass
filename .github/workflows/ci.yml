@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - name: Install clipboard build dependencies
+        run: sudo apt-get update && sudo apt-get install -y libpng-dev libx11-dev libxcb1-dev libxdmcp-dev libxau-dev zlib1g-dev
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -29,6 +31,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+      - name: Install clipboard build dependencies
+        run: sudo apt-get update && sudo apt-get install -y libpng-dev libx11-dev libxcb1-dev libxdmcp-dev libxau-dev zlib1g-dev
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo build --release --locked --bins
       - name: Package Linux amd64 binaries
