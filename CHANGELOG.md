@@ -1,8 +1,10 @@
 # Changelog
 
-## 0.9.0 (2026-09-21)
+## 0.9.0 (2026-09-22)
 
 - Adding a TUI.
+- `mypass repair` inspects malformed and duplicate vault entries interactively.
+  Duplicate entries can be removed or renamed while preserving their other fields.
 
 ## 0.8.0 (2026-09-19)
 

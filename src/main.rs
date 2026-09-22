@@ -737,94 +737,160 @@ fn repair(file: &Path, passphrase: &Passphrase, params: &Params) -> anyhow::Resu
         }
     }
     let mut seen = std::collections::HashSet::new();
-    for name in names.iter().flatten() {
-        if !seen.insert(name.clone()) {
-            continue;
-        }
-        let group: Vec<usize> = names
-            .iter()
-            .enumerate()
-            .filter_map(|(i, n)| (!removed[i] && n.as_deref() == Some(name)).then_some(i))
-            .collect();
-        if group.len() < 2 {
-            continue;
-        }
-        let identical = group
-            .iter()
-            .skip(1)
-            .all(|&i| document.entries[i] == document.entries[group[0]]);
-        let same_password = group.iter().skip(1).all(|&i| {
-            document.entries[i].get("password") == document.entries[group[0]].get("password")
-        });
-        eprintln!(
-            "Duplicate entry name '{}' ({} copies{}, passwords {}):",
-            sanitize(name),
-            group.len(),
-            if identical {
-                ", identical"
-            } else {
-                ", different"
-            },
-            if same_password { "same" } else { "different" }
-        );
-        for (choice, &i) in group.iter().enumerate() {
-            let v = &document.entries[i];
-            let label = |key| {
-                v.get(key)
-                    .and_then(|x| x.as_str())
-                    .map(sanitize)
-                    .unwrap_or_default()
-            };
-            eprintln!(
-                "  {}: entry {}, username '{}', url '{}', realm '{}'",
-                choice + 1,
-                i + 1,
-                label("username"),
-                label("url"),
-                label("realm")
-            );
-        }
-        if same_password {
-            eprintln!("Passwords are hidden.");
-        } else {
-            eprintln!(
-                "Passwords are hidden; compare the copies with a decrypted backup if needed."
-            );
-        }
-        let answer = prompt_line(&format!(
-            "Keep which copy [1-{}], or Enter to leave all? ",
-            group.len()
-        ))?;
-        if answer.trim().is_empty() {
-            continue;
-        }
-        let choice = answer
-            .trim()
-            .parse::<usize>()
-            .ok()
-            .filter(|n| (1..=group.len()).contains(n));
-        if let Some(choice) = choice {
-            for (n, &i) in group.iter().enumerate() {
-                if n + 1 != choice {
-                    removed[i] = true;
-                }
+    let duplicate_names: Vec<String> = names
+        .iter()
+        .flatten()
+        .filter(|name| seen.insert((*name).clone()))
+        .cloned()
+        .collect();
+    let mut renamed = 0;
+    for name in duplicate_names {
+        loop {
+            let group: Vec<usize> = names
+                .iter()
+                .enumerate()
+                .filter_map(|(i, n)| {
+                    (!removed[i] && n.as_deref() == Some(name.as_str())).then_some(i)
+                })
+                .collect();
+            if group.len() < 2 {
+                break;
             }
-        } else {
-            eprintln!("Invalid choice; left this group unchanged.");
+            let identical = group
+                .iter()
+                .skip(1)
+                .all(|&i| document.entries[i] == document.entries[group[0]]);
+            let same_password = group.iter().skip(1).all(|&i| {
+                document.entries[i].get("password") == document.entries[group[0]].get("password")
+            });
+            eprintln!(
+                "Duplicate entry name '{}' ({} copies{}, passwords {}):",
+                sanitize(&name),
+                group.len(),
+                if identical {
+                    ", identical"
+                } else {
+                    ", different"
+                },
+                if same_password { "same" } else { "different" }
+            );
+            for (choice, &i) in group.iter().enumerate() {
+                let v = &document.entries[i];
+                let label = |key| {
+                    v.get(key)
+                        .and_then(|x| x.as_str())
+                        .map(sanitize)
+                        .unwrap_or_default()
+                };
+                eprintln!(
+                    "  {}: entry {}, username '{}', url '{}', realm '{}'",
+                    choice + 1,
+                    i + 1,
+                    label("username"),
+                    label("url"),
+                    label("realm")
+                );
+            }
+            if same_password {
+                eprintln!("Passwords are hidden.");
+            } else {
+                eprintln!(
+                    "Passwords are hidden; compare the copies with a decrypted backup if needed."
+                );
+            }
+            let answer = prompt_line(&format!(
+                "Keep which copy [1-{}], rename one [r], or Enter to leave all? ",
+                group.len()
+            ))?;
+            if answer.trim().is_empty() {
+                break;
+            }
+            if answer.trim().eq_ignore_ascii_case("r") {
+                let selection = prompt_line(&format!("Rename which copy [1-{}]? ", group.len()))?;
+                let Some(copy) = selection
+                    .trim()
+                    .parse::<usize>()
+                    .ok()
+                    .filter(|n| (1..=group.len()).contains(n))
+                else {
+                    eprintln!("Invalid copy number; no entry renamed.");
+                    continue;
+                };
+                // Spaces are valid in entry names; remove only the line ending.
+                let new_name = prompt_line("New entry name: ")?
+                    .trim_end_matches(['\r', '\n'])
+                    .to_string();
+                if let Err(err) = mypass::validate_name(&new_name) {
+                    eprintln!("{err}");
+                    continue;
+                }
+                if document.entries.iter().enumerate().any(|(i, value)| {
+                    !removed[i]
+                        && value.get("name").and_then(|v| v.as_str()) == Some(new_name.as_str())
+                }) {
+                    eprintln!("Entry name '{}' already exists.", sanitize(&new_name));
+                    continue;
+                }
+                let index = group[copy - 1];
+                document.entries[index]
+                    .as_object_mut()
+                    .expect("validated entry is an object")
+                    .insert(
+                        "name".to_string(),
+                        serde_json::Value::String(new_name.clone()),
+                    );
+                names[index] = Some(new_name.clone());
+                renamed += 1;
+                eprintln!("Renamed entry {} to '{}'.", index + 1, sanitize(&new_name));
+                continue;
+            }
+            let choice = answer
+                .trim()
+                .parse::<usize>()
+                .ok()
+                .filter(|n| (1..=group.len()).contains(n));
+            if let Some(choice) = choice {
+                for (n, &i) in group.iter().enumerate() {
+                    if n + 1 != choice {
+                        removed[i] = true;
+                    }
+                }
+                break;
+            } else {
+                eprintln!("Invalid choice; left this group unchanged.");
+                break;
+            }
         }
     }
     let count = removed.iter().filter(|&&r| r).count();
-    if count == 0 {
+    if count == 0 && renamed == 0 {
         println!("No changes made.");
         return Ok(());
     }
     document.remove_entries(&removed);
     mypass::vault::store_repair(file, passphrase, &document, params)?;
-    println!(
-        "Removed {count} entr{}; previous vault saved as {}.",
-        if count == 1 { "y" } else { "ies" },
-        mypass::vault::backup_path(file).display()
-    );
+    if renamed > 0 {
+        if count == 0 {
+            println!(
+                "Renamed {renamed} entr{}; previous vault saved as {}.",
+                if renamed == 1 { "y" } else { "ies" },
+                mypass::vault::backup_path(file).display()
+            );
+        } else {
+            println!(
+                "Renamed {renamed} entr{}; removed {count} entr{}; previous vault saved as {}.",
+                if renamed == 1 { "y" } else { "ies" },
+                if count == 1 { "y" } else { "ies" },
+                mypass::vault::backup_path(file).display()
+            );
+        }
+    } else {
+        println!(
+            "Removed {count} entr{}; previous vault saved as {}.",
+            if count == 1 { "y" } else { "ies" },
+            mypass::vault::backup_path(file).display()
+        );
+    }
     Ok(())
 }
 

@@ -110,6 +110,66 @@ fn repair_reports_same_password_for_distinct_entries() {
 }
 
 #[test]
+fn repair_can_rename_duplicate_without_removing_either_copy() {
+    let dir = TempDir::new().unwrap();
+    let vault = dir.path().join("pw.scrypt");
+    write_raw_vault(
+        &vault,
+        r#"{"version":1,"entries":[{"name":"same","username":"old","password":"one"},{"name":"same","username":"new","password":"two","note":"preserve"}]}"#,
+    );
+    let before = std::fs::read(&vault).unwrap();
+    pw(&vault)
+        .arg("repair")
+        .write_stdin(format!("{PASSPHRASE}r\n2\nrenamed\n"))
+        .assert()
+        .success()
+        .stdout(contains("Renamed 1 entry; previous vault saved"))
+        .stderr(contains("Renamed entry 2 to 'renamed'").and(contains("passwords different")));
+    pw(&vault)
+        .args(["get", "same", "--show"])
+        .write_stdin(PASSPHRASE)
+        .assert()
+        .success()
+        .stdout("old\none\n");
+    pw(&vault)
+        .args(["get", "renamed", "--show"])
+        .write_stdin(PASSPHRASE)
+        .assert()
+        .success()
+        .stdout("new\ntwo\n");
+    assert_eq!(
+        std::fs::read(mypass::vault::backup_path(&vault)).unwrap(),
+        before
+    );
+    let plain =
+        scrypt_format::decrypt(&std::fs::read(&vault).unwrap(), b"test passphrase").unwrap();
+    let repaired: serde_json::Value = serde_json::from_slice(&plain).unwrap();
+    assert_eq!(repaired["entries"][1]["note"], "preserve");
+}
+
+#[test]
+fn repair_rejects_rename_to_existing_name_and_reprompts() {
+    let dir = TempDir::new().unwrap();
+    let vault = dir.path().join("pw.scrypt");
+    write_raw_vault(
+        &vault,
+        r#"{"version":1,"entries":[{"name":"same","username":"a","password":"one"},{"name":"same","username":"b","password":"two"},{"name":"taken","username":"c","password":"three"}]}"#,
+    );
+    pw(&vault)
+        .arg("repair")
+        .write_stdin(format!("{PASSPHRASE}r\n2\ntaken\nr\n2\nfree\n"))
+        .assert()
+        .success()
+        .stderr(contains("already exists").and(contains("Renamed entry 2 to 'free'")));
+    pw(&vault)
+        .args(["get", "free", "--show"])
+        .write_stdin(PASSPHRASE)
+        .assert()
+        .success()
+        .stdout("b\ntwo\n");
+}
+
+#[test]
 fn repair_legacy_array_keeps_array_and_no_change_does_not_write() {
     let dir = TempDir::new().unwrap();
     let vault = dir.path().join("pw.scrypt");

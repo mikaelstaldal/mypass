@@ -29,7 +29,7 @@ mypass                           # browse and edit interactively
 | Command                                     | Description                                                                                                    |
 |---------------------------------------------|----------------------------------------------------------------------------------------------------------------|
 | `mypass init`                               | Create a new empty vault. Asks for the passphrase twice.                                                       |
-| `mypass repair`                             | Inspect malformed and duplicate entries, ask which to remove, then save with a `.bak` backup.                  |
+| `mypass repair`                             | Inspect malformed and duplicate entries; remove or rename duplicates, then save with a `.bak` backup.          |
 | `mypass get <name> [--show]`                | Copy the password to the clipboard, or print it with `--show`. Prints the username first, if there is one.     |
 | `mypass list [PATTERN]`                     | List entries, optionally filtered by a case-insensitive substring of the name.                                 |
 | `mypass add <name> [username] [options]`    | Add an entry. The password is generated (and copied to the clipboard) unless `--input-password` is given.      |
