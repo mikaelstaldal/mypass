@@ -1,7 +1,7 @@
 use std::io::{self};
 use std::path::Path;
 
-use anyhow::{Context};
+use anyhow::Context;
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use crossterm::execute;
 use crossterm::terminal::{
@@ -242,7 +242,7 @@ impl App {
             })
             .unwrap_or_else(|| {
                 vec![Line::from(
-                    "The vault is empty. Press n to create an entry.",
+                    "The vault is empty. Press n or Insert to create an entry.",
                 )]
             });
         frame.render_widget(
@@ -255,7 +255,7 @@ impl App {
         let help = self
             .message
             .as_deref()
-            .unwrap_or("↑/↓ move  c copy password  n new  e edit  d delete  q quit");
+            .unwrap_or("↑/↓ move  c copy  n/Ins new  e/Enter edit  d/Del delete  q/Esc quit");
         frame.render_widget(
             Paragraph::new(help).style(Style::default().fg(if self.message.is_some() {
                 Color::Yellow
@@ -359,11 +359,13 @@ impl App {
             }
             KeyCode::Home => self.selected = 0,
             KeyCode::End => self.selected = self.entries.len().saturating_sub(1),
-            KeyCode::Char('n') => self.mode = Mode::Edit(Form::new()),
-            KeyCode::Char('e') if !self.entries.is_empty() => {
+            KeyCode::Char('n') | KeyCode::Insert => self.mode = Mode::Edit(Form::new()),
+            KeyCode::Char('e') | KeyCode::Enter if !self.entries.is_empty() => {
                 self.mode = Mode::Edit(Form::edit(self.selected, &self.entries[self.selected]))
             }
-            KeyCode::Char('d') if !self.entries.is_empty() => self.mode = Mode::ConfirmDelete,
+            KeyCode::Char('d') | KeyCode::Delete if !self.entries.is_empty() => {
+                self.mode = Mode::ConfirmDelete
+            }
             KeyCode::Char('c')
                 if !key.modifiers.contains(KeyModifiers::CONTROL) && !self.entries.is_empty() =>
             {
@@ -698,6 +700,32 @@ mod tests {
         assert!(matches!(app.mode, Mode::ConfirmExit));
         assert!(app.handle_key(key(KeyCode::Char('s'))));
         assert_eq!(app.exit, Exit::Save);
+    }
+
+    #[test]
+    fn browse_shortcut_keys() {
+        let mut app = App::new(vec![]);
+        app.handle_key(key(KeyCode::Enter));
+        app.handle_key(key(KeyCode::Delete));
+        assert!(matches!(app.mode, Mode::Browse));
+
+        app.handle_key(key(KeyCode::Insert));
+        let Mode::Edit(form) = &mut app.mode else {
+            panic!()
+        };
+        form.name = "example".into();
+        form.password = "secret".into();
+        app.handle_key(key(KeyCode::Enter));
+
+        app.handle_key(key(KeyCode::Enter));
+        assert!(matches!(app.mode, Mode::Edit(_)));
+        app.handle_key(key(KeyCode::Esc));
+        app.handle_key(key(KeyCode::Delete));
+        assert!(matches!(app.mode, Mode::ConfirmDelete));
+        app.handle_key(key(KeyCode::Esc));
+        assert_eq!(app.entries.len(), 1);
+        app.handle_key(key(KeyCode::Esc));
+        assert!(matches!(app.mode, Mode::ConfirmExit));
     }
 
     #[test]

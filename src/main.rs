@@ -15,6 +15,7 @@ use anyhow::{bail, Context};
 use clap::{Args, CommandFactory, Parser, Subcommand};
 use clippers::Clipboard;
 use dirs::home_dir;
+use serde::Serialize;
 use zeroize::Zeroizing;
 
 use mypass::{Params, Passphrase, PasswordEntry, Secret};
@@ -22,6 +23,27 @@ use mypass::{Params, Passphrase, PasswordEntry, Secret};
 mod tui;
 
 const DEFAULT_CHARSET: &str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-";
+
+#[derive(Serialize)]
+struct PublicEntry<'a> {
+    name: &'a str,
+    username: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    url: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    realm: Option<&'a str>,
+}
+
+impl<'a> From<&'a PasswordEntry> for PublicEntry<'a> {
+    fn from(entry: &'a PasswordEntry) -> Self {
+        Self {
+            name: &entry.name,
+            username: &entry.username,
+            url: entry.url.as_deref(),
+            realm: entry.realm.as_deref(),
+        }
+    }
+}
 
 #[derive(Parser)]
 #[command(version, about = "MyPass — a command line password manager")]
@@ -84,6 +106,9 @@ enum Commands {
     List {
         /// Only show entries whose name contains this (case-insensitive)
         pattern: Option<String>,
+        /// Print the vault as JSON without passwords
+        #[arg(long)]
+        json: bool,
     },
 
     /// Add a password
@@ -156,6 +181,9 @@ enum Commands {
     Show {
         /// The password entry
         name: String,
+        /// Print the entry as JSON without its password
+        #[arg(long)]
+        json: bool,
     },
 
     /// Print the decrypted vault as JSON, for backup or migration
@@ -402,16 +430,23 @@ fn run() -> anyhow::Result<ExitCode> {
                 );
             }
         }
-        Some(Commands::List { pattern }) => {
+        Some(Commands::List { pattern, json }) => {
             let passphrase = obtain_passphrase(cli.passphrase_stdin, false)?;
             let entries = mypass::list(&file, &passphrase)?;
-            println!("Vault: {} ({} entries)", file.display(), entries.len());
             let pattern = pattern.unwrap_or_default().to_lowercase();
-            for entry in entries
+            let filtered: Vec<_> = entries
                 .iter()
                 .filter(|e| e.name.to_lowercase().contains(&pattern))
-            {
-                println!("{}: {}", sanitize(&entry.name), sanitize(&entry.username));
+                .collect();
+            if json {
+                let public_entries: Vec<_> =
+                    filtered.iter().map(|e| PublicEntry::from(*e)).collect();
+                println!("{}", serde_json::to_string_pretty(&public_entries)?);
+            } else {
+                println!("Vault: {} ({} entries)", file.display(), entries.len());
+                for entry in filtered {
+                    println!("{}: {}", sanitize(&entry.name), sanitize(&entry.username));
+                }
             }
         }
         Some(Commands::Add {
@@ -511,18 +546,25 @@ fn run() -> anyhow::Result<ExitCode> {
                 announce_copied("Generated password", clear_timeout);
             }
         }
-        Some(Commands::Show { name }) => {
+        Some(Commands::Show { name, json }) => {
             let passphrase = obtain_passphrase(cli.passphrase_stdin, false)?;
             let entry = mypass::get(&file, &passphrase, &name)?;
-            println!("name: {}", sanitize(&entry.name));
-            if !entry.username.is_empty() {
-                println!("username: {}", sanitize(&entry.username));
-            }
-            if let Some(url) = &entry.url {
-                println!("url: {}", sanitize(url));
-            }
-            if let Some(realm) = &entry.realm {
-                println!("realm: {}", sanitize(realm));
+            if json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&PublicEntry::from(&entry))?
+                );
+            } else {
+                println!("name: {}", sanitize(&entry.name));
+                if !entry.username.is_empty() {
+                    println!("username: {}", sanitize(&entry.username));
+                }
+                if let Some(url) = &entry.url {
+                    println!("url: {}", sanitize(url));
+                }
+                if let Some(realm) = &entry.realm {
+                    println!("realm: {}", sanitize(realm));
+                }
             }
         }
         Some(Commands::Export {}) => {

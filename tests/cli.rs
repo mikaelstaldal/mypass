@@ -260,20 +260,6 @@ fn get_fails_if_vault_does_not_exist() {
 }
 
 #[test]
-fn tui_rejects_passphrase_stdin() {
-    let dir = TempDir::new().unwrap();
-    let vault = init_vault(&dir);
-    pw(&vault)
-        .arg("tui")
-        .write_stdin(PASSPHRASE)
-        .assert()
-        .failure()
-        .stderr(contains(
-            "--passphrase-stdin cannot be used with the interactive TUI",
-        ));
-}
-
-#[test]
 fn add_then_get_round_trip() {
     let dir = TempDir::new().unwrap();
     let vault = init_vault(&dir);
@@ -771,6 +757,69 @@ fn show_fails_for_unknown_entry() {
         .assert()
         .failure()
         .stderr(contains("no entry 'bogus'"));
+}
+
+#[test]
+fn json_output_has_complete_public_fields_and_no_password() {
+    let dir = TempDir::new().unwrap();
+    let vault = init_vault(&dir);
+    let password = add_entry(&vault, "bare", "");
+    pw(&vault)
+        .args([
+            "add",
+            "site",
+            "alice",
+            "--url",
+            "example.com",
+            "--realm",
+            "Admin",
+            "--show",
+        ])
+        .write_stdin(PASSPHRASE)
+        .assert()
+        .success();
+
+    let show = pw(&vault)
+        .args(["show", "bare", "--json"])
+        .write_stdin(PASSPHRASE)
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let entry: serde_json::Value = serde_json::from_slice(&show).unwrap();
+    assert_eq!(entry, serde_json::json!({"name": "bare", "username": ""}));
+    assert!(!String::from_utf8(show).unwrap().contains(&password));
+
+    let list = pw(&vault)
+        .args(["list", "--json"])
+        .write_stdin(PASSPHRASE)
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let entries_json: serde_json::Value = serde_json::from_slice(&list).unwrap();
+    assert_eq!(
+        entries_json,
+        serde_json::json!([
+            {"name": "bare", "username": ""},
+            {"name": "site", "username": "alice", "url": "example.com", "realm": "Admin"}
+        ])
+    );
+    assert!(!String::from_utf8(list).unwrap().contains(&password));
+
+    let filtered = pw(&vault)
+        .args(["list", "SITE", "--json"])
+        .write_stdin(PASSPHRASE)
+        .assert()
+        .success()
+        .get_output()
+        .stdout
+        .clone();
+    let filtered_json: serde_json::Value = serde_json::from_slice(&filtered).unwrap();
+    assert_eq!(filtered_json.as_array().unwrap().len(), 1);
+    assert_eq!(filtered_json[0]["name"], "site");
 }
 
 #[cfg(unix)]

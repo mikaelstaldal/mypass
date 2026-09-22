@@ -5,6 +5,7 @@
 - Adding a TUI.
 - `mypass repair` inspects malformed and duplicate vault entries interactively.
   Duplicate entries can be removed or renamed while preserving their other fields.
+- `--json` options to `list` and `show` commands.
 
 ## 0.8.0 (2026-09-19)
 
