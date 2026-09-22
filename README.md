@@ -10,6 +10,14 @@ There is also a [native Android app](https://github.com/mikaelstaldal/mypass-and
 
 ## Installation
 
+On Ubuntu or Debian, install the native build dependencies for the clipboard
+library before building:
+
+```sh
+sudo apt-get update
+sudo apt-get install -y libpng-dev libx11-dev libxcb1-dev libxdmcp-dev libxau-dev zlib1g-dev
+```
+
 ```sh
 cargo install --path .
 ```
