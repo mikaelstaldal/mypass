@@ -377,7 +377,7 @@ fn validate_site(url: Option<&str>, realm: Option<&str>) -> Result<(), MyPassErr
 }
 
 /// Validate the user-supplied fields of an entry before it is stored.
-fn validate_entry(entry: &PasswordEntry) -> Result<(), MyPassError> {
+pub fn validate_entry(entry: &PasswordEntry) -> Result<(), MyPassError> {
     validate_name(&entry.name)?;
     validate_username(&entry.username)?;
     validate_site(entry.url.as_deref(), entry.realm.as_deref())

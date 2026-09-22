@@ -68,6 +68,9 @@ enum Commands {
     /// Create a new empty vault
     Init {},
 
+    /// Inspect malformed and duplicate entries and offer to remove them
+    Repair {},
+
     /// Look up a password and copy it to the clipboard
     Get {
         /// The password entry
@@ -370,6 +373,10 @@ fn run() -> anyhow::Result<ExitCode> {
             mypass::init(&file, &passphrase, &params)?;
             println!("Initialized empty vault at {}", file.display());
         }
+        Some(Commands::Repair {}) => {
+            let passphrase = obtain_passphrase(cli.passphrase_stdin, false)?;
+            repair(&file, &passphrase, &params)?;
+        }
         Some(Commands::Get { name, show }) => {
             let passphrase = obtain_passphrase(cli.passphrase_stdin, false)?;
             let entry = mypass::get(&file, &passphrase, &name)?;
@@ -532,7 +539,8 @@ fn run() -> anyhow::Result<ExitCode> {
             install_browser(uninstall, snap, no_snap)?;
         }
         None => {
-            if io::stdin().is_terminal() && io::stdout().is_terminal() && io::stderr().is_terminal() {
+            if io::stdin().is_terminal() && io::stdout().is_terminal() && io::stderr().is_terminal()
+            {
                 if cli.passphrase_stdin {
                     bail!("--passphrase-stdin cannot be used with the interactive TUI");
                 }
@@ -685,6 +693,146 @@ fn confirm(prompt: &str) -> anyhow::Result<bool> {
     let mut line = String::new();
     io::stdin().lock().read_line(&mut line)?;
     Ok(matches!(line.trim(), "y" | "Y" | "yes" | "Yes"))
+}
+
+fn repair(file: &Path, passphrase: &Passphrase, params: &Params) -> anyhow::Result<()> {
+    if !file.exists() {
+        bail!("no vault at {} - run `mypass init`", file.display());
+    }
+    let mut document = mypass::vault::load_for_repair(file, passphrase)
+        .with_context(|| format!("cannot use vault {}", file.display()))?;
+    let mut removed = vec![false; document.entries.len()];
+    let mut names = Vec::with_capacity(document.entries.len());
+    for (index, value) in document.entries.iter().enumerate() {
+        let raw = Zeroizing::new(serde_json::to_string(value)?);
+        let parsed = serde_json::from_str::<PasswordEntry>(&raw);
+        match parsed {
+            Ok(entry) => match mypass::validate_entry(&entry) {
+                Ok(()) => names.push(Some(entry.name.clone())),
+                Err(err) => {
+                    eprintln!(
+                        "Entry {} ('{}') is malformed: {}",
+                        index + 1,
+                        sanitize(&entry.name),
+                        err
+                    );
+                    removed[index] = confirm_required("Remove this entry? [y/N] ")?;
+                    names.push(None);
+                }
+            },
+            Err(_) => {
+                let label = value
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .map(sanitize)
+                    .unwrap_or_else(|| "<unnamed>".into());
+                eprintln!(
+                    "Entry {} ('{}') is malformed: invalid entry fields or types",
+                    index + 1,
+                    label
+                );
+                removed[index] = confirm_required("Remove this entry? [y/N] ")?;
+                names.push(None);
+            }
+        }
+    }
+    let mut seen = std::collections::HashSet::new();
+    for name in names.iter().flatten() {
+        if !seen.insert(name.clone()) {
+            continue;
+        }
+        let group: Vec<usize> = names
+            .iter()
+            .enumerate()
+            .filter_map(|(i, n)| (!removed[i] && n.as_deref() == Some(name)).then_some(i))
+            .collect();
+        if group.len() < 2 {
+            continue;
+        }
+        let identical = group
+            .iter()
+            .skip(1)
+            .all(|&i| document.entries[i] == document.entries[group[0]]);
+        eprintln!(
+            "Duplicate entry name '{}' ({} copies{}):",
+            sanitize(name),
+            group.len(),
+            if identical {
+                ", identical"
+            } else {
+                ", different"
+            }
+        );
+        for (choice, &i) in group.iter().enumerate() {
+            let v = &document.entries[i];
+            let label = |key| {
+                v.get(key)
+                    .and_then(|x| x.as_str())
+                    .map(sanitize)
+                    .unwrap_or_default()
+            };
+            eprintln!(
+                "  {}: entry {}, username '{}', url '{}', realm '{}'",
+                choice + 1,
+                i + 1,
+                label("username"),
+                label("url"),
+                label("realm")
+            );
+        }
+        eprintln!("Passwords are hidden; compare the copies with a decrypted backup if needed.");
+        let answer = prompt_line(&format!(
+            "Keep which copy [1-{}], or Enter to leave all? ",
+            group.len()
+        ))?;
+        if answer.trim().is_empty() {
+            continue;
+        }
+        let choice = answer
+            .trim()
+            .parse::<usize>()
+            .ok()
+            .filter(|n| (1..=group.len()).contains(n));
+        if let Some(choice) = choice {
+            for (n, &i) in group.iter().enumerate() {
+                if n + 1 != choice {
+                    removed[i] = true;
+                }
+            }
+        } else {
+            eprintln!("Invalid choice; left this group unchanged.");
+        }
+    }
+    let count = removed.iter().filter(|&&r| r).count();
+    if count == 0 {
+        println!("No changes made.");
+        return Ok(());
+    }
+    document.remove_entries(&removed);
+    mypass::vault::store_repair(file, passphrase, &document, params)?;
+    println!(
+        "Removed {count} entr{}; previous vault saved as {}.",
+        if count == 1 { "y" } else { "ies" },
+        mypass::vault::backup_path(file).display()
+    );
+    Ok(())
+}
+
+fn prompt_line(prompt: &str) -> anyhow::Result<String> {
+    eprint!("{prompt}");
+    io::stderr().flush()?;
+    let mut answer = String::new();
+    if io::stdin().lock().read_line(&mut answer)? == 0 {
+        bail!("input ended before repair was complete; vault unchanged");
+    }
+    Ok(answer)
+}
+
+fn confirm_required(prompt: &str) -> anyhow::Result<bool> {
+    Ok(matches!(
+        prompt_line(prompt)?.trim(),
+        "y" | "Y" | "yes" | "Yes"
+    ))
 }
 
 /// Treat an absent or empty `--url`/`--realm` as "not set", so an entry

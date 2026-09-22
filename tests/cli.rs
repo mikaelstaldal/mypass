@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 
 use assert_cmd::Command;
 use assert_fs::TempDir;
+use mypass::{scrypt_format, Params};
 use predicates::prelude::*;
 use predicates::str::contains;
 
@@ -37,6 +38,116 @@ fn add_entry(vault: &Path, name: &str, username: &str) -> String {
         .success();
     let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
     stdout.trim_end().to_string()
+}
+
+fn write_raw_vault(vault: &Path, json: &str) {
+    let ciphertext = scrypt_format::encrypt(
+        json.as_bytes(),
+        b"test passphrase",
+        &Params {
+            log_n: 12,
+            r: 8,
+            p: 1,
+        },
+    )
+    .unwrap();
+    std::fs::write(vault, ciphertext).unwrap();
+}
+
+#[test]
+fn repair_removes_malformed_and_chooses_duplicate() {
+    let dir = TempDir::new().unwrap();
+    let vault = dir.path().join("pw.scrypt");
+    write_raw_vault(
+        &vault,
+        r#"{"version":1,"created":"2020","entries":[{"name":"bad","username":"u","password":8675309},{"name":"same","username":"old","password":"one"},{"name":"same","username":"new","password":"two","note":"keep me"}]}"#,
+    );
+    let before = std::fs::read(&vault).unwrap();
+    pw(&vault)
+        .arg("repair")
+        .write_stdin(format!("{PASSPHRASE}y\n2\n"))
+        .assert()
+        .success()
+        .stdout(contains("Removed 2 entries"))
+        .stderr(
+            contains("malformed")
+                .and(contains("Duplicate entry name 'same'"))
+                .and(predicates::str::is_match("8675309").unwrap().not()),
+        );
+    pw(&vault)
+        .args(["get", "same", "--show"])
+        .write_stdin(PASSPHRASE)
+        .assert()
+        .success()
+        .stdout("new\ntwo\n");
+    assert_eq!(
+        std::fs::read(mypass::vault::backup_path(&vault)).unwrap(),
+        before
+    );
+    let plain =
+        scrypt_format::decrypt(&std::fs::read(&vault).unwrap(), b"test passphrase").unwrap();
+    let repaired: serde_json::Value = serde_json::from_slice(&plain).unwrap();
+    assert_eq!(repaired["created"], "2020");
+    assert_eq!(repaired["entries"][0]["note"], "keep me");
+}
+
+#[test]
+fn repair_legacy_array_keeps_array_and_no_change_does_not_write() {
+    let dir = TempDir::new().unwrap();
+    let vault = dir.path().join("pw.scrypt");
+    write_raw_vault(
+        &vault,
+        r#"[{"name":"same","username":"a","password":"one"},{"name":"same","username":"b","password":"two"}]"#,
+    );
+    let before = std::fs::read(&vault).unwrap();
+    pw(&vault)
+        .arg("repair")
+        .write_stdin(format!("{PASSPHRASE}\n"))
+        .assert()
+        .success()
+        .stdout(contains("No changes made"));
+    assert_eq!(std::fs::read(&vault).unwrap(), before);
+    pw(&vault)
+        .arg("repair")
+        .write_stdin(format!("{PASSPHRASE}1\n"))
+        .assert()
+        .success();
+    let plain =
+        scrypt_format::decrypt(&std::fs::read(&vault).unwrap(), b"test passphrase").unwrap();
+    let repaired: serde_json::Value = serde_json::from_slice(&plain).unwrap();
+    assert!(repaired.is_array());
+    assert_eq!(repaired.as_array().unwrap().len(), 1);
+}
+
+#[test]
+fn repair_reports_malformed_envelope_without_fabricated_eof() {
+    let dir = TempDir::new().unwrap();
+    let vault = dir.path().join("pw.scrypt");
+    write_raw_vault(&vault, r#"{"version":1,"entrys":[]}"#);
+    pw(&vault)
+        .arg("repair")
+        .write_stdin(PASSPHRASE)
+        .assert()
+        .failure()
+        .stderr(contains("entries must be an array").and(contains("EOF while parsing").not()));
+}
+
+#[test]
+fn repair_eof_leaves_vault_unchanged() {
+    let dir = TempDir::new().unwrap();
+    let vault = dir.path().join("pw.scrypt");
+    write_raw_vault(
+        &vault,
+        r#"{"version":1,"entries":[{"name":"bad","username":"u","password":42}]}"#,
+    );
+    let before = std::fs::read(&vault).unwrap();
+    pw(&vault)
+        .arg("repair")
+        .write_stdin(PASSPHRASE)
+        .assert()
+        .failure()
+        .stderr(contains("vault unchanged"));
+    assert_eq!(std::fs::read(&vault).unwrap(), before);
 }
 
 #[test]

@@ -60,6 +60,8 @@ pub enum Error {
     Format(#[from] scrypt_format::Error),
     #[error("invalid vault content")]
     InvalidJson(#[source] serde_json::Error),
+    #[error("malformed vault envelope: {0}")]
+    MalformedEnvelope(&'static str),
     #[error("vault format version {0} is newer than this version of MyPass understands")]
     UnsupportedVersion(u32),
 }
@@ -113,6 +115,106 @@ pub fn load(file: &Path, passphrase: &Passphrase) -> Result<Vec<PasswordEntry>, 
     }
 }
 
+/// Decrypt a vault for repair without requiring every entry to deserialize.
+/// The caller decides which entries to remove before writing it back.
+pub fn load_for_repair(file: &Path, passphrase: &Passphrase) -> Result<RepairDocument, Error> {
+    let data = fs::read(file).map_err(|source| Error::Read {
+        file: file.to_path_buf(),
+        source,
+    })?;
+    let plaintext = scrypt_format::decrypt(&data, passphrase.as_bytes())?;
+    let value: serde_json::Value =
+        serde_json::from_slice(&plaintext).map_err(Error::InvalidJson)?;
+    let (legacy, entries, extra) = match value {
+        serde_json::Value::Array(entries) => (true, entries, serde_json::Map::new()),
+        serde_json::Value::Object(mut object) => {
+            let version = object.remove("version").and_then(|v| v.as_u64());
+            match version {
+                Some(1) => {}
+                Some(n) if n <= u32::MAX as u64 => return Err(Error::UnsupportedVersion(n as u32)),
+                Some(_) => return Err(Error::MalformedEnvelope("version is out of range")),
+                None => return Err(Error::MalformedEnvelope("missing or invalid version")),
+            }
+            match object.remove("entries") {
+                Some(serde_json::Value::Array(entries)) => (false, entries, object),
+                _ => return Err(Error::MalformedEnvelope("entries must be an array")),
+            }
+        }
+        _ => return Err(Error::MalformedEnvelope("root must be an object or array")),
+    };
+    Ok(RepairDocument {
+        entries,
+        legacy,
+        extra,
+    })
+}
+
+pub struct RepairDocument {
+    pub entries: Vec<serde_json::Value>,
+    legacy: bool,
+    extra: serde_json::Map<String, serde_json::Value>,
+}
+
+impl RepairDocument {
+    /// Remove selected entries, clearing their JSON strings before release.
+    pub fn remove_entries(&mut self, removed: &[bool]) {
+        assert_eq!(removed.len(), self.entries.len());
+        let mut index = 0;
+        self.entries.retain_mut(|value| {
+            let keep = !removed[index];
+            index += 1;
+            if !keep {
+                scrub_json(value);
+            }
+            keep
+        });
+    }
+}
+
+fn scrub_json(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::String(s) => zeroize::Zeroize::zeroize(s),
+        serde_json::Value::Array(values) => values.iter_mut().for_each(scrub_json),
+        serde_json::Value::Object(values) => values.values_mut().for_each(scrub_json),
+        _ => {}
+    }
+}
+
+impl Drop for RepairDocument {
+    fn drop(&mut self) {
+        self.entries.iter_mut().for_each(scrub_json);
+        self.extra.values_mut().for_each(scrub_json);
+    }
+}
+
+/// Save a repair document with the same atomic write and backup as `store`.
+pub fn store_repair(
+    file: &Path,
+    passphrase: &Passphrase,
+    document: &RepairDocument,
+    params: &Params,
+) -> Result<(), Error> {
+    let plaintext = if document.legacy {
+        serde_json::to_string(&document.entries)
+    } else {
+        #[derive(Serialize)]
+        struct RawEnvelope<'a> {
+            version: u32,
+            entries: &'a [serde_json::Value],
+            #[serde(flatten)]
+            extra: &'a serde_json::Map<String, serde_json::Value>,
+        }
+        serde_json::to_string(&RawEnvelope {
+            version: ENVELOPE_VERSION,
+            entries: &document.entries,
+            extra: &document.extra,
+        })
+    }
+    .map(Zeroizing::new)
+    .map_err(Error::InvalidJson)?;
+    store_plaintext(file, passphrase, &plaintext, params)
+}
+
 /// Encrypt and write the vault atomically.
 ///
 /// The ciphertext goes to `<file>.tmp` (created exclusively, `0o600` on
@@ -132,6 +234,15 @@ pub fn store(
     params: &Params,
 ) -> Result<(), Error> {
     let plaintext = to_json(entries)?;
+    store_plaintext(file, passphrase, &plaintext, params)
+}
+
+fn store_plaintext(
+    file: &Path,
+    passphrase: &Passphrase,
+    plaintext: &str,
+    params: &Params,
+) -> Result<(), Error> {
     let ciphertext = scrypt_format::encrypt(plaintext.as_bytes(), passphrase.as_bytes(), params)?;
 
     let write_err = |source| Error::Write {
