@@ -753,15 +753,19 @@ fn repair(file: &Path, passphrase: &Passphrase, params: &Params) -> anyhow::Resu
             .iter()
             .skip(1)
             .all(|&i| document.entries[i] == document.entries[group[0]]);
+        let same_password = group.iter().skip(1).all(|&i| {
+            document.entries[i].get("password") == document.entries[group[0]].get("password")
+        });
         eprintln!(
-            "Duplicate entry name '{}' ({} copies{}):",
+            "Duplicate entry name '{}' ({} copies{}, passwords {}):",
             sanitize(name),
             group.len(),
             if identical {
                 ", identical"
             } else {
                 ", different"
-            }
+            },
+            if same_password { "same" } else { "different" }
         );
         for (choice, &i) in group.iter().enumerate() {
             let v = &document.entries[i];
@@ -780,7 +784,13 @@ fn repair(file: &Path, passphrase: &Passphrase, params: &Params) -> anyhow::Resu
                 label("realm")
             );
         }
-        eprintln!("Passwords are hidden; compare the copies with a decrypted backup if needed.");
+        if same_password {
+            eprintln!("Passwords are hidden.");
+        } else {
+            eprintln!(
+                "Passwords are hidden; compare the copies with a decrypted backup if needed."
+            );
+        }
         let answer = prompt_line(&format!(
             "Keep which copy [1-{}], or Enter to leave all? ",
             group.len()

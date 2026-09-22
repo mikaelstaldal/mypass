@@ -72,6 +72,7 @@ fn repair_removes_malformed_and_chooses_duplicate() {
         .stderr(
             contains("malformed")
                 .and(contains("Duplicate entry name 'same'"))
+                .and(contains("passwords different"))
                 .and(predicates::str::is_match("8675309").unwrap().not()),
         );
     pw(&vault)
@@ -89,6 +90,23 @@ fn repair_removes_malformed_and_chooses_duplicate() {
     let repaired: serde_json::Value = serde_json::from_slice(&plain).unwrap();
     assert_eq!(repaired["created"], "2020");
     assert_eq!(repaired["entries"][0]["note"], "keep me");
+}
+
+#[test]
+fn repair_reports_same_password_for_distinct_entries() {
+    let dir = TempDir::new().unwrap();
+    let vault = dir.path().join("pw.scrypt");
+    write_raw_vault(
+        &vault,
+        r#"{"version":1,"entries":[{"name":"same","username":"a","password":"secret"},{"name":"same","username":"b","password":"secret"}]}"#,
+    );
+    // The second newline is the empty answer that leaves both copies in place.
+    pw(&vault)
+        .arg("repair")
+        .write_stdin(format!("{PASSPHRASE}\n"))
+        .assert()
+        .success()
+        .stderr(contains("passwords same").and(contains("secret").not()));
 }
 
 #[test]
