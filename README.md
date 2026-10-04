@@ -38,7 +38,7 @@ mypass                           # browse and edit interactively
 |---------------------------------------------|----------------------------------------------------------------------------------------------------------------|
 | `mypass init`                               | Create a new empty vault. Asks for the passphrase twice.                                                       |
 | `mypass repair`                             | Inspect malformed and duplicate entries; remove or rename duplicates, then save with a `.bak` backup.          |
-| `mypass get <name> [--show]`                | Copy the password to the clipboard, or print it with `--show`. Prints the username first, if there is one.     |
+| `mypass get <name> [--show\|--show-credentials]` | Print the username (if present) and copy the password to the clipboard. `--show` prints username and password on separate lines; `--show-credentials` prints `username:password`. |
 | `mypass list [PATTERN]`                     | List entries, optionally filtered by a case-insensitive substring of the name.                                 |
 | `mypass add <name> [username] [options]`    | Add an entry. The password is generated (and copied to the clipboard) unless `--input-password` is given.      |
 | `mypass update <name> [username] [options]` | Replace the username and password of an existing entry, or just the username/url/realm with `--keep-password`. |
@@ -48,7 +48,7 @@ mypass                           # browse and edit interactively
 | `mypass`                                    | Browse, create, update and delete entries in an interactive terminal.                                          |
 | `mypass install-browser [--uninstall]`      | Install (or remove) the Firefox native-messaging manifest for the browser integration. See below.              |
 
-Options for `add`, `update` and `generate`:
+Command options:
 
 - `--password-length <n>` — length of the generated password (default 16)
 - `--password-charset <chars>` — characters to generate from; duplicate Unicode
@@ -65,6 +65,10 @@ Options for `add`, `update` and `generate`:
   the username, url and realm (`update` only)
 - `--show` — print the password to stdout instead of copying it to the
   clipboard
+- `--show-credentials` — on `get`, print `username:password` without a
+  trailing newline instead of copying the password; an empty username prints
+  as `:password`. A username containing `:` makes this format ambiguous for
+  consumers that split on the colon.
 
 Global options:
 

@@ -98,8 +98,11 @@ enum Commands {
         /// The password entry
         name: String,
         /// Print the password to stdout instead of copying it
-        #[arg(long)]
+        #[arg(long, conflicts_with = "show_credentials")]
         show: bool,
+        /// Print username:password to stdout instead of copying the password
+        #[arg(long)]
+        show_credentials: bool,
     },
 
     /// List entries
@@ -405,22 +408,27 @@ fn run() -> anyhow::Result<ExitCode> {
             let passphrase = obtain_passphrase(cli.passphrase_stdin, false)?;
             repair(&file, &passphrase, &params)?;
         }
-        Some(Commands::Get { name, show }) => {
+        Some(Commands::Get {
+            name,
+            show,
+            show_credentials,
+        }) => {
             let passphrase = obtain_passphrase(cli.passphrase_stdin, false)?;
             let entry = mypass::get(&file, &passphrase, &name)?;
-            if !entry.username.is_empty() {
+            if !show_credentials && !entry.username.is_empty() {
                 println!("{}", sanitize(&entry.username));
             }
             // The url and realm are informational; print them to stderr so the
-            // stdout contract (username, then password under --show) is
-            // unchanged.
+            // stdout output formats remain suitable for scripts.
             if let Some(url) = &entry.url {
                 eprintln!("url: {}", sanitize(url));
             }
             if let Some(realm) = &entry.realm {
                 eprintln!("realm: {}", sanitize(realm));
             }
-            if show {
+            if show_credentials {
+                print!("{}:{}", sanitize(&entry.username), entry.password.expose());
+            } else if show {
                 println!("{}", entry.password.expose());
             } else {
                 pending_clear = Some(copy_to_clipboard(entry.password.expose())?);

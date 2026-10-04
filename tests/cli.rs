@@ -272,6 +272,13 @@ fn add_then_get_round_trip() {
         .assert()
         .success()
         .stdout(format!("user1\n{password}\n"));
+
+    pw(&vault)
+        .args(["get", "foo", "--show-credentials"])
+        .write_stdin(PASSPHRASE)
+        .assert()
+        .success()
+        .stdout(format!("user1:{password}"));
 }
 
 #[test]
@@ -287,6 +294,26 @@ fn add_without_username() {
         .assert()
         .success()
         .stdout(format!("{password}\n"));
+
+    pw(&vault)
+        .args(["get", "foo", "--show-credentials"])
+        .write_stdin(PASSPHRASE)
+        .assert()
+        .success()
+        .stdout(format!(":{password}"));
+}
+
+#[test]
+fn get_output_formats_conflict() {
+    let dir = TempDir::new().unwrap();
+    let vault = init_vault(&dir);
+
+    pw(&vault)
+        .args(["get", "foo", "--show", "--show-credentials"])
+        .write_stdin(PASSPHRASE)
+        .assert()
+        .failure()
+        .stderr(contains("cannot be used with"));
 }
 
 #[test]

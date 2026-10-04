@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.10.0 (2026-10-04)
+
+- `mypass get --show-credentials` to print username:password to standard out.
+
 ## 0.9.0 (2026-09-22)
 
 - Adding a TUI.
