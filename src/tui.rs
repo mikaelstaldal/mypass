@@ -13,7 +13,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap};
 use ratatui::{Frame, Terminal};
-use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use mypass::{Params, PasswordEntry, Secret};
 
@@ -23,7 +23,7 @@ pub fn run(file: &Path, params: &Params, clear_timeout: u64) -> anyhow::Result<(
     drop(passphrase);
 
     let mut terminal = TerminalGuard::enter()?;
-    let mut app = App::new(entries);
+    let mut app = App::new(entries, clear_timeout);
     loop {
         terminal.terminal.draw(|frame| app.draw(frame))?;
         if let Event::Key(key) = event::read().context("cannot read terminal input")? {
@@ -43,9 +43,9 @@ pub fn run(file: &Path, params: &Params, clear_timeout: u64) -> anyhow::Result<(
         Exit::Clean => Ok(()),
         Exit::Running => unreachable!(),
     };
-    if let Some(secret) = app.copied_password.take() {
+    if let Some(mut copied) = app.copied_password.take() {
         super::announce_copied("Password", clear_timeout);
-        super::wait_and_clear(&secret, clear_timeout);
+        super::wait_and_clear(&mut copied, clear_timeout);
     }
     result
 }
@@ -142,19 +142,21 @@ enum Mode {
 
 struct App {
     entries: Vec<PasswordEntry>,
+    clear_timeout: u64,
     selected: usize,
     dirty: bool,
     mode: Mode,
     message: Option<String>,
-    copied_password: Option<Zeroizing<String>>,
+    copied_password: Option<super::CopiedPassword>,
     exit: Exit,
 }
 
 impl App {
-    fn new(mut entries: Vec<PasswordEntry>) -> Self {
+    fn new(mut entries: Vec<PasswordEntry>, clear_timeout: u64) -> Self {
         entries.sort_by_key(|e| e.name.to_lowercase());
         Self {
             entries,
+            clear_timeout,
             selected: 0,
             dirty: false,
             mode: Mode::Browse,
@@ -369,7 +371,10 @@ impl App {
             KeyCode::Char('c')
                 if !key.modifiers.contains(KeyModifiers::CONTROL) && !self.entries.is_empty() =>
             {
-                match super::copy_to_clipboard(self.entries[self.selected].password.expose()) {
+                match super::copy_to_clipboard(
+                    self.entries[self.selected].password.expose(),
+                    self.clear_timeout,
+                ) {
                     Ok(secret) => {
                         self.copied_password = Some(secret);
                         self.message = Some("Password copied to clipboard".to_string());
@@ -675,7 +680,7 @@ mod tests {
 
     #[test]
     fn create_edit_delete_and_choose_exit() {
-        let mut app = App::new(vec![]);
+        let mut app = App::new(vec![], 20);
         app.handle_key(key(KeyCode::Char('n')));
         let Mode::Edit(form) = &mut app.mode else {
             panic!()
@@ -704,7 +709,7 @@ mod tests {
 
     #[test]
     fn browse_shortcut_keys() {
-        let mut app = App::new(vec![]);
+        let mut app = App::new(vec![], 20);
         app.handle_key(key(KeyCode::Enter));
         app.handle_key(key(KeyCode::Delete));
         assert!(matches!(app.mode, Mode::Browse));
@@ -754,13 +759,16 @@ mod tests {
 
     #[test]
     fn delete_confirmation_ignores_unrelated_keys() {
-        let mut app = App::new(vec![PasswordEntry {
-            name: "one".into(),
-            username: String::new(),
-            password: "pw".into(),
-            url: None,
-            realm: None,
-        }]);
+        let mut app = App::new(
+            vec![PasswordEntry {
+                name: "one".into(),
+                username: String::new(),
+                password: "pw".into(),
+                url: None,
+                realm: None,
+            }],
+            20,
+        );
         app.handle_key(key(KeyCode::Char('d')));
         app.handle_key(key(KeyCode::Down));
         assert!(matches!(app.mode, Mode::ConfirmDelete));
