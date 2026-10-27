@@ -79,6 +79,10 @@ generator (ChaCha20, OS-seeded) without modulo bias.
 
 ### Interactive TUI
 
+In interactive mode, press `/` to search by name, username, URL or realm (case insensitive).
+Results update as you type. Press Enter to browse the results, `/` to revise the search,
+or Escape to clear it. Passwords are never searched.
+
 Running `mypass` without subcommand unlocks the vault once at startup and lets you 
 make several changes before writing anything. Use the arrow keys (or `j`/`k`) to browse,
 `c` to copy the selected password, `n` to create, `e` to edit and `d` to

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.12.0 (2026-10-27)
+
+- Search in TUI.
+
 ## 0.11.0 (2026-10-05)
 
 - Replace `clippers` library with `arboard` for clipboard management.

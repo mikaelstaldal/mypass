@@ -135,6 +135,7 @@ enum Exit {
 
 enum Mode {
     Browse,
+    Search,
     Edit(Form),
     ConfirmDelete,
     ConfirmExit,
@@ -144,6 +145,7 @@ struct App {
     entries: Vec<PasswordEntry>,
     clear_timeout: u64,
     selected: usize,
+    query: String,
     dirty: bool,
     mode: Mode,
     message: Option<String>,
@@ -158,12 +160,42 @@ impl App {
             entries,
             clear_timeout,
             selected: 0,
+            query: String::new(),
             dirty: false,
             mode: Mode::Browse,
             message: None,
             copied_password: None,
             exit: Exit::Running,
         }
+    }
+
+    fn visible_indices(&self) -> Vec<usize> {
+        let query = self.query.to_lowercase();
+        self.entries
+            .iter()
+            .enumerate()
+            .filter_map(|(index, entry)| {
+                [
+                    &entry.name[..],
+                    &entry.username[..],
+                    entry.url.as_deref().unwrap_or_default(),
+                    entry.realm.as_deref().unwrap_or_default(),
+                ]
+                .iter()
+                .any(|value| value.to_lowercase().contains(&query))
+                .then_some(index)
+            })
+            .collect()
+    }
+
+    fn selected_index(&self) -> Option<usize> {
+        self.visible_indices().get(self.selected).copied()
+    }
+
+    fn clear_search(&mut self) {
+        let selected = self.selected_index().unwrap_or(0);
+        self.query.clear();
+        self.selected = selected;
     }
 
     fn draw(&self, frame: &mut Frame) {
@@ -176,16 +208,17 @@ impl App {
             .constraints([Constraint::Percentage(40), Constraint::Percentage(60)])
             .split(chunks[0]);
 
-        let items = self
-            .entries
+        let visible = self.visible_indices();
+        let items = visible
             .iter()
-            .map(|entry| ListItem::new(super::sanitize(&entry.name)));
+            .map(|&index| ListItem::new(super::sanitize(&self.entries[index].name)));
         let mut state = ListState::default();
-        if !self.entries.is_empty() {
+        if !visible.is_empty() {
             state.select(Some(self.selected));
         }
         let title = format!(
-            " Entries ({}){} ",
+            " Entries ({}/{}){} ",
+            visible.len(),
             self.entries.len(),
             if self.dirty { " *" } else { "" }
         );
@@ -204,8 +237,8 @@ impl App {
         );
 
         let detail = self
-            .entries
-            .get(self.selected)
+            .selected_index()
+            .map(|index| &self.entries[index])
             .map(|entry| {
                 vec![
                     Line::from(vec![
@@ -243,9 +276,11 @@ impl App {
                 ]
             })
             .unwrap_or_else(|| {
-                vec![Line::from(
-                    "The vault is empty. Press n or Insert to create an entry.",
-                )]
+                vec![Line::from(if self.entries.is_empty() {
+                    "The vault is empty. Press n or Insert to create an entry."
+                } else {
+                    "No matching entries. Press / to change the search or Esc to clear it."
+                })]
             });
         frame.render_widget(
             Paragraph::new(detail)
@@ -254,16 +289,26 @@ impl App {
             body[1],
         );
 
+        let search_help = format!("/{}  Enter browse  Esc clear", super::sanitize(&self.query));
+        let filtered_help = format!("Search: {}  / edit search  Esc clear  ↑/↓ move  c copy  n new  e edit  d delete  q quit", super::sanitize(&self.query));
         let help = self
             .message
             .as_deref()
-            .unwrap_or("↑/↓ move  c copy  n/Ins new  e/Enter edit  d/Del delete  q/Esc quit");
-        frame.render_widget(
-            Paragraph::new(help).style(Style::default().fg(if self.message.is_some() {
-                Color::Yellow
+            .unwrap_or(if matches!(self.mode, Mode::Search) {
+                &search_help
+            } else if !self.query.is_empty() {
+                &filtered_help
             } else {
-                Color::Gray
-            })),
+                "↑/↓ move  / search  c copy  n/Ins new  e/Enter edit  d/Del delete  q/Esc quit"
+            });
+        frame.render_widget(
+            Paragraph::new(help)
+                .wrap(Wrap { trim: false })
+                .style(Style::default().fg(if self.message.is_some() {
+                    Color::Yellow
+                } else {
+                    Color::Gray
+                })),
             chunks[1],
         );
 
@@ -283,7 +328,7 @@ impl App {
                 52,
                 5,
             ),
-            Mode::Browse => {}
+            Mode::Browse | Mode::Search => {}
         }
     }
 
@@ -295,10 +340,43 @@ impl App {
                 self.handle_browse(key);
                 std::mem::replace(&mut self.mode, Mode::Browse)
             }
+            Mode::Search => {
+                match key.code {
+                    KeyCode::Enter => self.mode = Mode::Browse,
+                    KeyCode::Esc => {
+                        self.clear_search();
+                        self.mode = Mode::Browse;
+                    }
+                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        self.handle_browse(key);
+                    }
+                    KeyCode::Backspace => {
+                        self.query.pop();
+                        self.selected = 0;
+                        self.mode = Mode::Search;
+                    }
+                    KeyCode::Char(c)
+                        if !key
+                            .modifiers
+                            .intersects(KeyModifiers::CONTROL | KeyModifiers::ALT)
+                            && !c.is_control() =>
+                    {
+                        self.query.push(c);
+                        self.selected = 0;
+                        self.mode = Mode::Search;
+                    }
+                    _ => self.mode = Mode::Search,
+                }
+                std::mem::replace(&mut self.mode, Mode::Browse)
+            }
             Mode::ConfirmDelete => match key.code {
                 KeyCode::Char('y') | KeyCode::Char('Y') => {
-                    self.entries.remove(self.selected);
-                    self.selected = self.selected.min(self.entries.len().saturating_sub(1));
+                    if let Some(index) = self.selected_index() {
+                        self.entries.remove(index);
+                    }
+                    self.selected = self
+                        .selected
+                        .min(self.visible_indices().len().saturating_sub(1));
                     self.dirty = true;
                     Mode::Browse
                 }
@@ -339,6 +417,14 @@ impl App {
                             .position(|e| e.name == form.name)
                             .unwrap_or(0);
                     }
+                    let visible = self.visible_indices();
+                    let position = visible.iter().position(|&index| index == self.selected);
+                    self.message = Some(if position.is_some() {
+                        "Entry saved".into()
+                    } else {
+                        "Entry saved (hidden by search; press Esc to clear)".into()
+                    });
+                    self.selected = position.unwrap_or(0);
                     self.dirty = true;
                     Mode::Browse
                 }
@@ -355,24 +441,32 @@ impl App {
         match key.code {
             KeyCode::Up | KeyCode::Char('k') => self.selected = self.selected.saturating_sub(1),
             KeyCode::Down | KeyCode::Char('j') => {
-                if self.selected + 1 < self.entries.len() {
+                if self.selected + 1 < self.visible_indices().len() {
                     self.selected += 1;
                 }
             }
             KeyCode::Home => self.selected = 0,
-            KeyCode::End => self.selected = self.entries.len().saturating_sub(1),
-            KeyCode::Char('n') | KeyCode::Insert => self.mode = Mode::Edit(Form::new()),
-            KeyCode::Char('e') | KeyCode::Enter if !self.entries.is_empty() => {
-                self.mode = Mode::Edit(Form::edit(self.selected, &self.entries[self.selected]))
+            KeyCode::End => self.selected = self.visible_indices().len().saturating_sub(1),
+            KeyCode::Char('/') => self.mode = Mode::Search,
+            KeyCode::Esc if !self.query.is_empty() => {
+                self.clear_search();
             }
-            KeyCode::Char('d') | KeyCode::Delete if !self.entries.is_empty() => {
+            KeyCode::Char('n') | KeyCode::Insert => self.mode = Mode::Edit(Form::new()),
+            KeyCode::Char('e') | KeyCode::Enter if self.selected_index().is_some() => {
+                let index = self.selected_index().unwrap();
+                self.mode = Mode::Edit(Form::edit(index, &self.entries[index]))
+            }
+            KeyCode::Char('d') | KeyCode::Delete if self.selected_index().is_some() => {
                 self.mode = Mode::ConfirmDelete
             }
             KeyCode::Char('c')
-                if !key.modifiers.contains(KeyModifiers::CONTROL) && !self.entries.is_empty() =>
+                if !key.modifiers.contains(KeyModifiers::CONTROL)
+                    && self.selected_index().is_some() =>
             {
                 match super::copy_to_clipboard(
-                    self.entries[self.selected].password.expose(),
+                    self.entries[self.selected_index().unwrap()]
+                        .password
+                        .expose(),
                     self.clear_timeout,
                 ) {
                     Ok(secret) => {
@@ -731,6 +825,111 @@ mod tests {
         assert_eq!(app.entries.len(), 1);
         app.handle_key(key(KeyCode::Esc));
         assert!(matches!(app.mode, Mode::ConfirmExit));
+    }
+
+    fn searchable_app() -> App {
+        App::new(
+            vec![
+                PasswordEntry {
+                    name: "Alpha".into(),
+                    username: "alice".into(),
+                    password: "hidden".into(),
+                    url: None,
+                    realm: None,
+                },
+                PasswordEntry {
+                    name: "Beta".into(),
+                    username: "bob".into(),
+                    password: "hidden".into(),
+                    url: Some("https://example.org".into()),
+                    realm: Some("Admin".into()),
+                },
+            ],
+            20,
+        )
+    }
+
+    fn search(app: &mut App, query: &str) {
+        app.handle_key(key(KeyCode::Char('/')));
+        for c in query.chars() {
+            app.handle_key(key(KeyCode::Char(c)));
+        }
+        app.handle_key(key(KeyCode::Enter));
+    }
+
+    #[test]
+    fn search_matches_metadata_but_never_passwords() {
+        for query in ["BETA", "BOB", "EXAMPLE", "ADMIN"] {
+            let mut app = searchable_app();
+            search(&mut app, query);
+            assert_eq!(app.visible_indices(), vec![1]);
+            assert_eq!(app.selected_index(), Some(1));
+            assert!(!app.dirty);
+            app.handle_key(key(KeyCode::Esc));
+            assert_eq!(app.visible_indices(), vec![0, 1]);
+            assert_eq!(app.exit, Exit::Running);
+        }
+        let mut app = searchable_app();
+        search(&mut app, "hidden");
+        assert_eq!(app.selected_index(), None);
+        app.handle_key(key(KeyCode::Delete));
+        app.handle_key(key(KeyCode::Enter));
+        assert!(matches!(app.mode, Mode::Browse));
+    }
+
+    #[test]
+    fn filtered_edit_and_delete_target_the_visible_entry() {
+        let mut app = searchable_app();
+        search(&mut app, "beta");
+        app.handle_key(key(KeyCode::Enter));
+        let Mode::Edit(form) = &mut app.mode else {
+            panic!()
+        };
+        assert_eq!(form.editing, Some(1));
+        form.name = "Aardvark".into();
+        app.handle_key(key(KeyCode::Enter));
+        assert!(app.visible_indices().is_empty());
+        assert!(app.message.as_deref().unwrap().contains("hidden by search"));
+        app.handle_key(key(KeyCode::Esc));
+        search(&mut app, "alice");
+        app.handle_key(key(KeyCode::Delete));
+        app.handle_key(key(KeyCode::Char('y')));
+        assert_eq!(app.entries.len(), 1);
+        assert_eq!(app.entries[0].name, "Aardvark");
+    }
+
+    #[test]
+    fn clearing_search_preserves_selection_and_control_c_quits() {
+        let mut app = searchable_app();
+        search(&mut app, "beta");
+        app.handle_key(key(KeyCode::Esc));
+        assert_eq!(app.selected_index(), Some(1));
+        app.handle_key(key(KeyCode::Char('/')));
+        assert!(app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL)));
+        assert_eq!(app.exit, Exit::Clean);
+
+        let mut app = searchable_app();
+        app.dirty = true;
+        app.handle_key(key(KeyCode::Char('/')));
+        assert!(!app.handle_key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL)));
+        assert!(matches!(app.mode, Mode::ConfirmExit));
+    }
+
+    #[test]
+    fn search_input_handles_unicode_and_shortcut_characters() {
+        let mut app = searchable_app();
+        app.handle_key(key(KeyCode::Char('/')));
+        for c in "éqnd".chars() {
+            app.handle_key(key(KeyCode::Char(c)));
+        }
+        assert_eq!(app.query, "éqnd");
+        for _ in 0..4 {
+            app.handle_key(key(KeyCode::Backspace));
+        }
+        assert_eq!(app.query, "");
+        assert_eq!(app.visible_indices().len(), 2);
+        app.handle_key(key(KeyCode::Esc));
+        assert_eq!(app.exit, Exit::Running);
     }
 
     #[test]
