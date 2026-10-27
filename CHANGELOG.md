@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.11.0 (2026-10-05)
+
+- Replace `clippers` library with `arboard` for clipboard management.
+
 ## 0.10.0 (2026-10-04)
 
 - `mypass get --show-credentials` to print username:password to standard out.
