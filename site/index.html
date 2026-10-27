@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MyPass — a password manager for the command line</title>
+  <meta name="description" content="MyPass keeps your passwords in a single encrypted file, in the standard scrypt format you can always recover. Command line, terminal UI and Firefox integration.">
+  <link rel="icon" href="logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <a class="brand" href="#top">
+        <img src="logo.svg" alt="" width="28" height="28">
+        <span>MyPass</span>
+      </a>
+      <nav aria-label="Main">
+        <a href="#features">Features</a>
+        <a href="#firefox">Firefox</a>
+        <a href="#format">File format</a>
+        <a href="#install">Install</a>
+        <a class="nav-gh" href="https://github.com/mikaelstaldal/mypass">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow">Open source · Rust · Apache-2.0</p>
+          <h1>Your passwords, in one file <em>you&nbsp;can always open.</em></h1>
+          <p class="lede">
+            MyPass is a command line password manager. It keeps everything in a single
+            encrypted file, written in the standard <strong>scrypt</strong> format, so
+            your vault stays recoverable without MyPass. You will never be locked in.
+          </p>
+          <div class="cta">
+            <a class="btn btn-primary" href="#install">Get started</a>
+            <a class="btn btn-ghost" href="https://github.com/mikaelstaldal/mypass">View source</a>
+          </div>
+        </div>
+
+        <div class="terminal" role="img" aria-label="Example terminal session using mypass">
+          <div class="terminal-bar"><span></span><span></span><span></span><b>~</b></div>
+<pre><code><span class="p">$</span> mypass init
+<span class="o">Passphrase: </span>
+<span class="o">Confirm passphrase: </span>
+<span class="ok">Initialized empty vault at /home/alice/mypass.scrypt</span>
+<span class="p">$</span> mypass add github.com alice --url github.com
+<span class="o">Passphrase: </span>
+<span class="ok">Password for 'github.com' copied to clipboard; clearing in 20s (press ENTER to clear now).</span>
+<span class="o">Clipboard cleared.</span>
+<span class="p">$</span> mypass list
+<span class="o">Passphrase: </span>
+<span class="o">Vault: /home/alice/mypass.scrypt (1 entries)</span>
+<span class="o">github.com: alice</span>
+<span class="p">$</span> mypass get github.com
+<span class="o">Passphrase: </span>
+<span class="o">alice</span>
+<span class="o">url: github.com</span>
+<span class="ok">Password for 'github.com' copied to clipboard; clearing in 20s (press ENTER to clear now).</span><span class="cursor"></span></code></pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="features" class="section">
+      <div class="wrap">
+        <h2 class="section-title">Small, auditable, and careful with secrets</h2>
+        <div class="features">
+          <article class="feature">
+            <div class="icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+            </div>
+            <h3>One encrypted file</h3>
+            <p>All entries live in <code>~/mypass.scrypt</code>. Back it up, sync it, or copy
+              it to a USB stick. There's no server and no account.</p>
+          </article>
+          <article class="feature">
+            <div class="icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg>
+            </div>
+            <h3>Strong cryptography</h3>
+            <p>scrypt key derivation, AES-256-CTR and HMAC-SHA256, all done in-process. Passwords
+              are generated with ChaCha20, without modulo bias.</p>
+          </article>
+          <article class="feature">
+            <div class="icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M9 5H5v14h14v-4M14 4h6v6M20 4l-9 9"/></svg>
+            </div>
+            <h3>No lock-in</h3>
+            <p>The vault is a standard scrypt file. Tarsnap's <code>scrypt dec</code> can
+              decrypt it to plain JSON at any time.</p>
+          </article>
+          <article class="feature">
+            <div class="icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 10l3 2-3 2M12 15h5"/></svg>
+            </div>
+            <h3>CLI and terminal UI</h3>
+            <p>Use scriptable subcommands, or run plain <code>mypass</code> to browse and edit
+              your entries in an interactive terminal UI.</p>
+          </article>
+          <article class="feature">
+            <div class="icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M8 4h8v4H8zM6 8h12v12H6z"/><path d="M10 13h4"/></svg>
+            </div>
+            <h3>Clipboard that cleans up</h3>
+            <p>A copied password is cleared after 20 seconds, but only if it's still on the
+              clipboard. Anything you copied in the meantime is kept.</p>
+          </article>
+          <article class="feature">
+            <div class="icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1016 0 8 8 0 00-16 0zM9 12l2 2 4-4"/></svg>
+            </div>
+            <h3>Safe writes</h3>
+            <p>Every save writes a temporary file, syncs it and renames it, and keeps the
+              previous version as <code>.bak</code>. A crash can't leave a truncated vault.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="firefox" class="section section-alt">
+      <div class="wrap split">
+        <div>
+          <p class="eyebrow">Firefox integration</p>
+          <h2>Fill logins without the clipboard, and without giving Firefox your vault.</h2>
+          <p>
+            A companion program, <code>mypass-browser-host</code>, decrypts the vault outside
+            the browser. It asks for your master passphrase in a <code>pinentry</code> dialog
+            and releases only the one entry that matches the site you are on.
+          </p>
+          <ul class="checks">
+            <li>Nothing is filled until you click the toolbar button or press <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>L</kbd>.</li>
+            <li>Sites match on the entry's <code>url</code>, using the Public Suffix List, so
+              <code>github.com.evil.example</code> gets nothing.</li>
+            <li>The host is read-only. Only you, with your passphrase, decide which sites
+              can receive an entry.</li>
+            <li>Optional HTTP authentication support, with stricter rules: the host must match
+              exactly, and a page can never trigger a passphrase prompt.</li>
+          </ul>
+        </div>
+        <div class="diagram" aria-label="How the Firefox integration works">
+          <div class="node">
+            <span class="node-label">Firefox add-on</span>
+            <span class="node-sub">holds no secrets</span>
+          </div>
+          <div class="arrow"><span>origin of the active tab</span></div>
+          <div class="node node-accent">
+            <span class="node-label">mypass-browser-host</span>
+            <span class="node-sub">pinentry · read-only</span>
+          </div>
+          <div class="arrow arrow-down"><span>decrypts in-process</span></div>
+          <div class="node">
+            <span class="node-label">~/mypass.scrypt</span>
+            <span class="node-sub">one matching entry released</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="format" class="section">
+      <div class="wrap split split-reverse">
+        <div>
+          <p class="eyebrow">File format and recovery</p>
+          <h2>Readable in ten years, even without MyPass.</h2>
+          <p>
+            The vault uses the
+            <a href="https://github.com/Tarsnap/scrypt/blob/master/FORMAT">scrypt
+            encrypted-data format</a> (version 0), with scrypt parameters
+            <code>N=2<sup>17</sup>, r=8, p=1</code>. Inside it is a small JSON document.
+            Interoperability with the reference <a href="https://www.tarsnap.com/scrypt.html">scrypt</a>
+            tool is checked in both directions by the test suite.
+          </p>
+          <p>
+            <code>mypass export</code> prints the same JSON, for backup or for moving to
+            another tool.
+          </p>
+        </div>
+        <div class="terminal terminal-small">
+          <div class="terminal-bar"><span></span><span></span><span></span><b>recovery</b></div>
+<pre><code><span class="p">$</span> scrypt dec ~/mypass.scrypt
+<span class="o">Please enter passphrase: </span>
+<span class="j">{"version":1,"entries":[
+  {"name":"github.com",
+   "username":"alice",
+   "password":"…"}]}</span></code></pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="section section-alt">
+      <div class="wrap">
+        <h2 class="section-title">Security notes</h2>
+        <div class="notes">
+          <div class="note">
+            <h3>Zeroized memory</h3>
+            <p>Secrets are wiped from memory once they are no longer needed, and are redacted
+              from debug output.</p>
+          </div>
+          <div class="note">
+            <h3>No core dumps</h3>
+            <p>MyPass disables core dumps at startup. On Linux it also marks itself
+              non-dumpable, which blocks <code>ptrace</code> attaches from other same-user processes.</p>
+          </div>
+          <div class="note">
+            <h3>Private file modes</h3>
+            <p>On Unix, the vault and its backup are created with mode <code>0600</code>
+              from the start.</p>
+          </div>
+          <div class="note">
+            <h3>AppArmor templates</h3>
+            <p>Profile templates are included for confining both the CLI and the browser host.</p>
+          </div>
+        </div>
+        <p class="caveat">
+          Things MyPass can't control: clipboard history managers may keep their own copy of a
+          password, and secrets in memory can be paged out to swap. Use encrypted swap. See the
+          <a href="https://github.com/mikaelstaldal/mypass#security-notes">README</a> for details.
+        </p>
+      </div>
+    </section>
+
+    <section id="install" class="section">
+      <div class="wrap">
+        <h2 class="section-title">Install</h2>
+        <div class="install">
+          <div class="install-card">
+            <h3>Pre-built Linux binaries</h3>
+            <p>Each release on GitHub has a tarball with <code>mypass</code> and
+              <code>mypass-browser-host</code> for Linux amd64.</p>
+            <a class="btn btn-primary" href="https://github.com/mikaelstaldal/mypass/releases/latest">Latest release</a>
+          </div>
+          <div class="install-card">
+            <h3>Build from source</h3>
+            <p>You need a recent stable Rust toolchain.</p>
+<pre class="code"><code>git clone https://github.com/mikaelstaldal/mypass
+cd mypass
+cargo install --path .</code></pre>
+          </div>
+        </div>
+
+        <h3 class="sub">Quick start</h3>
+<pre class="code"><code>mypass init                      <span class="c"># create an empty vault at ~/mypass.scrypt</span>
+mypass add github.com alice      <span class="c"># generate a password and copy it to the clipboard</span>
+mypass get github.com            <span class="c"># copy the password to the clipboard again</span>
+mypass list                      <span class="c"># show all entries</span>
+mypass                           <span class="c"># browse and edit interactively</span>
+mypass install-browser           <span class="c"># install the Firefox native-messaging host</span></code></pre>
+
+        <p class="more">
+          For the Firefox integration you also need <code>pinentry</code> and the MyPass add-on; see
+          <a href="https://github.com/mikaelstaldal/mypass/blob/main/webextension/README.md">webextension/README.md</a>
+          for how to install it.
+          Also available as a <a href="https://github.com/mikaelstaldal/mypass-android">native Android app</a>.
+          See the <a href="https://github.com/mikaelstaldal/mypass#readme">README</a> for every command and option.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="wrap footer-inner">
+      <span>© 2024–2026 Mikael Ståldal · Licensed under the
+        <a href="https://github.com/mikaelstaldal/mypass/blob/main/LICENSE">Apache License 2.0</a></span>
+      <a href="https://github.com/mikaelstaldal/mypass">github.com/mikaelstaldal/mypass</a>
+    </div>
+  </footer>
+</body>
+</html>
