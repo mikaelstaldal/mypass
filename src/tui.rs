@@ -773,6 +773,37 @@ mod tests {
     }
 
     #[test]
+    fn edit_retains_fields_until_explicitly_changed() {
+        let entry = PasswordEntry {
+            name: "site".into(),
+            username: "alice".into(),
+            password: Secret::new("secret".into()),
+            url: Some("example.com".into()),
+            realm: Some("Admin".into()),
+        };
+        let mut form = Form::edit(0, &entry);
+        form.username = "bob".into();
+        let FormResult::Save(saved) = form.handle_key(key(KeyCode::Enter), &[entry]) else {
+            panic!("expected save");
+        };
+        assert_eq!(saved.username, "bob");
+        assert_eq!(saved.password.expose(), "secret");
+        assert_eq!(saved.url.as_deref(), Some("example.com"));
+        assert_eq!(saved.realm.as_deref(), Some("Admin"));
+        let mut form = Form::edit(0, &saved);
+        form.username.clear();
+        form.url.clear();
+        form.realm.clear();
+        let FormResult::Save(cleared) = form.handle_key(key(KeyCode::Enter), &[saved]) else {
+            panic!("expected save");
+        };
+        assert!(cleared.username.is_empty());
+        assert_eq!(cleared.url, None);
+        assert_eq!(cleared.realm, None);
+        assert_eq!(cleared.password.expose(), "secret");
+    }
+
+    #[test]
     fn create_edit_delete_and_choose_exit() {
         let mut app = App::new(vec![], 20);
         app.handle_key(key(KeyCode::Char('n')));

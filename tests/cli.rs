@@ -348,7 +348,7 @@ fn update_changes_the_password() {
     add_entry(&vault, "foo", "user1");
 
     let assert = pw(&vault)
-        .args(["update", "foo", "user2", "--show"])
+        .args(["update", "foo", "user2", "--change-password", "--show"])
         .write_stdin(PASSPHRASE)
         .assert()
         .success();
@@ -370,7 +370,7 @@ fn update_unknown_entry() {
     let dir = TempDir::new().unwrap();
     let vault = init_vault(&dir);
     pw(&vault)
-        .args(["update", "bogus", "user", "--show"])
+        .args(["update", "bogus", "user"])
         .write_stdin(PASSPHRASE)
         .assert()
         .failure()
@@ -568,7 +568,7 @@ fn realm_without_url_is_rejected() {
 }
 
 #[test]
-fn update_without_realm_clears_it() {
+fn update_clear_realm() {
     let dir = TempDir::new().unwrap();
     let vault = init_vault(&dir);
     pw(&vault)
@@ -585,10 +585,9 @@ fn update_without_realm_clears_it() {
         .write_stdin(PASSPHRASE)
         .assert()
         .success();
-    // Keeping the url but omitting --realm clears the realm alone, turning a
-    // realm-scoped entry back into a wildcard over its host.
+    // Explicitly clear only the realm.
     pw(&vault)
-        .args(["update", "site", "u", "--url", "example.com", "--show"])
+        .args(["update", "site", "--clear-realm"])
         .write_stdin(PASSPHRASE)
         .assert()
         .success();
@@ -601,7 +600,7 @@ fn update_without_realm_clears_it() {
 }
 
 #[test]
-fn update_without_url_clears_it() {
+fn update_clear_url() {
     let dir = TempDir::new().unwrap();
     let vault = init_vault(&dir);
     pw(&vault)
@@ -609,10 +608,9 @@ fn update_without_url_clears_it() {
         .write_stdin(PASSPHRASE)
         .assert()
         .success();
-    // Omitting --url on update clears it, the same way omitting the username
-    // clears the username.
+    // Explicitly clear only the URL.
     pw(&vault)
-        .args(["update", "site", "u", "--show"])
+        .args(["update", "site", "--clear-url"])
         .write_stdin(PASSPHRASE)
         .assert()
         .success();
@@ -632,14 +630,7 @@ fn update_keep_password_changes_metadata_only() {
 
     // Re-point the entry at a site and relabel it, keeping the password.
     pw(&vault)
-        .args([
-            "update",
-            "foo",
-            "user2",
-            "--url",
-            "github.com",
-            "--keep-password",
-        ])
+        .args(["update", "foo", "user2", "--url", "github.com"])
         .write_stdin(PASSPHRASE)
         .assert()
         .success()
@@ -656,13 +647,13 @@ fn update_keep_password_changes_metadata_only() {
 }
 
 #[test]
-fn update_keep_password_rejects_input_password() {
+fn update_requires_explicit_password_change() {
     let dir = TempDir::new().unwrap();
     let vault = init_vault(&dir);
     add_entry(&vault, "foo", "user1");
-    // --keep-password and --input-password contradict each other.
+    // Password input requires explicit rotation.
     pw(&vault)
-        .args(["update", "foo", "--keep-password", "--input-password"])
+        .args(["update", "foo", "--input-password"])
         .write_stdin(PASSPHRASE)
         .assert()
         .failure();
@@ -857,4 +848,108 @@ fn vault_created_with_restrictive_permissions() {
     let vault = init_vault(&dir);
     let mode = std::fs::metadata(&vault).unwrap().permissions().mode() & 0o777;
     assert_eq!(mode, 0o600);
+}
+
+#[test]
+fn update_retains_omitted_fields_and_rejects_noop() {
+    let dir = TempDir::new().unwrap();
+    let vault = init_vault(&dir);
+    let output = pw(&vault)
+        .args([
+            "add",
+            "site",
+            "alice",
+            "--url",
+            "example.com",
+            "--realm",
+            "Admin",
+            "--show",
+        ])
+        .write_stdin(PASSPHRASE)
+        .assert()
+        .success();
+    let password = String::from_utf8(output.get_output().stdout.clone()).unwrap();
+    let before = std::fs::read(&vault).unwrap();
+    pw(&vault)
+        .args(["update", "site"])
+        .assert()
+        .failure()
+        .stderr(contains("No changes requested"));
+    assert_eq!(before, std::fs::read(&vault).unwrap());
+    pw(&vault)
+        .args(["update", "site", "--realm", "Other"])
+        .write_stdin(PASSPHRASE)
+        .assert()
+        .success();
+    pw(&vault)
+        .args(["get", "site", "--show"])
+        .write_stdin(PASSPHRASE)
+        .assert()
+        .success()
+        .stdout(format!("alice\n{password}"))
+        .stderr(contains("url: example.com").and(contains("realm: Other")));
+    pw(&vault)
+        .args(["update", "site", "--change-password", "--show"])
+        .write_stdin(PASSPHRASE)
+        .assert()
+        .success();
+    pw(&vault)
+        .args(["show", "site"])
+        .write_stdin(PASSPHRASE)
+        .assert()
+        .success()
+        .stdout(
+            contains("alice")
+                .and(contains("example.com"))
+                .and(contains("Other")),
+        );
+    let output = pw(&vault)
+        .args(["get", "site", "--show"])
+        .write_stdin(PASSPHRASE)
+        .assert()
+        .success();
+    let password = String::from_utf8(output.get_output().stdout.clone())
+        .unwrap()
+        .strip_prefix("alice\n")
+        .unwrap()
+        .to_string();
+    pw(&vault)
+        .args(["update", "site", "--clear-url"])
+        .write_stdin(PASSPHRASE)
+        .assert()
+        .failure();
+    pw(&vault)
+        .args([
+            "update",
+            "site",
+            "--clear-username",
+            "--clear-url",
+            "--clear-realm",
+        ])
+        .write_stdin(PASSPHRASE)
+        .assert()
+        .success();
+    pw(&vault)
+        .args(["get", "site", "--show"])
+        .write_stdin(PASSPHRASE)
+        .assert()
+        .success()
+        .stdout(password);
+}
+
+#[test]
+fn update_rejects_conflicting_set_and_clear() {
+    for args in [
+        vec!["update", "site", "--password-length", "16"],
+        vec!["update", "site", "--show"],
+        vec!["update", "site", "alice", "--clear-username"],
+        vec!["update", "site", "--url", "example.com", "--clear-url"],
+        vec!["update", "site", "--realm", "Admin", "--clear-realm"],
+    ] {
+        Command::cargo_bin("mypass")
+            .unwrap()
+            .args(args)
+            .assert()
+            .failure();
+    }
 }

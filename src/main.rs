@@ -85,6 +85,19 @@ struct PasswordOptions {
     password_charset: String,
 }
 
+#[derive(Args)]
+struct UpdatePasswordOptions {
+    /// Type the replacement password instead of generating one
+    #[arg(long, requires = "change_password")]
+    input_password: bool,
+    /// Length of the generated replacement password
+    #[arg(long, requires = "change_password")]
+    password_length: Option<u32>,
+    /// Characters to use in the generated replacement password
+    #[arg(long, requires = "change_password")]
+    password_charset: Option<String>,
+}
+
 #[derive(Subcommand)]
 enum Commands {
     /// Create a new empty vault
@@ -140,19 +153,28 @@ enum Commands {
         name: String,
         /// Username (free-form label, may be omitted)
         username: Option<String>,
-        /// Site this entry is for; omit to clear it (like the username)
-        #[arg(long)]
+        /// Site this entry is for; kept when omitted
+        #[arg(long, conflicts_with = "clear_url")]
         url: Option<String>,
-        /// HTTP authentication realm on that site; omit to clear it
-        #[arg(long, requires = "url")]
+        /// HTTP authentication realm; kept when omitted
+        #[arg(long, conflicts_with = "clear_realm")]
         realm: Option<String>,
-        /// Keep the existing password, only changing the username, url and realm
-        #[arg(long, conflicts_with = "input_password")]
-        keep_password: bool,
-        #[command(flatten)]
-        password: PasswordOptions,
-        /// Print the new password to stdout instead of copying it
+        /// Clear the existing username
+        #[arg(long, conflicts_with = "username")]
+        clear_username: bool,
+        /// Clear the existing URL (clear its realm explicitly too, if present)
+        #[arg(long, conflicts_with = "realm")]
+        clear_url: bool,
+        /// Clear the existing realm
         #[arg(long)]
+        clear_realm: bool,
+        /// Generate or input a replacement password
+        #[arg(long)]
+        change_password: bool,
+        #[command(flatten)]
+        password: UpdatePasswordOptions,
+        /// Print the new password to stdout instead of copying it
+        #[arg(long, requires = "change_password")]
         show: bool,
     },
 
@@ -492,44 +514,74 @@ fn run() -> anyhow::Result<ExitCode> {
             username,
             url,
             realm,
-            keep_password,
+            change_password,
+            clear_username,
+            clear_url,
+            clear_realm,
             password,
             show,
         }) => {
-            if keep_password {
-                let passphrase = obtain_passphrase(cli.passphrase_stdin, false)?;
-                mypass::update_keep_password(
-                    &file,
-                    &passphrase,
-                    &name,
-                    username.unwrap_or_default(),
-                    normalize_hint(url),
-                    normalize_hint(realm),
-                    &params,
-                )?;
-                println!("Updated entry '{}' (password unchanged).", sanitize(&name));
+            if !change_password
+                && username.is_none()
+                && url.is_none()
+                && realm.is_none()
+                && !clear_username
+                && !clear_url
+                && !clear_realm
+            {
+                bail!("No changes requested");
+            }
+            let replacement = if change_password {
+                Some(obtain_password(&PasswordOptions {
+                    input_password: password.input_password,
+                    password_length: password.password_length.unwrap_or(16),
+                    password_charset: password
+                        .password_charset
+                        .unwrap_or_else(|| DEFAULT_CHARSET.into()),
+                })?)
             } else {
-                let password = obtain_password(&password)?;
-                let passphrase = obtain_passphrase(cli.passphrase_stdin, false)?;
+                None
+            };
+            let passphrase = obtain_passphrase(cli.passphrase_stdin, false)?;
+            let mut entry = mypass::get(&file, &passphrase, &name)?;
+            if let Some(username) = username {
+                entry.username = username;
+            } else if clear_username {
+                entry.username.clear();
+            }
+            if let Some(url) = url {
+                let url = normalize_hint(Some(url)).context("Use --clear-url to clear the URL")?;
+                entry.url = Some(url);
+            } else if clear_url {
+                entry.url = None;
+            }
+            if let Some(realm) = realm {
+                let realm =
+                    normalize_hint(Some(realm)).context("Use --clear-realm to clear the realm")?;
+                entry.realm = Some(realm);
+            } else if clear_realm {
+                entry.realm = None;
+            }
+            if let Some(password) = replacement {
+                entry.password = password;
+            }
+            let changed_password =
+                change_password.then(|| Zeroizing::new(entry.password.expose().to_string()));
+            if change_password && !show {
+                pending_clear = Some(copy_to_clipboard(entry.password.expose(), clear_timeout)?);
+            }
+            mypass::update(&file, &passphrase, entry, &params)?;
+            if let Some(password) = changed_password {
                 if show {
-                    println!("{}", password.expose());
+                    println!("{}", *password);
                 } else {
-                    pending_clear = Some(copy_to_clipboard(password.expose(), clear_timeout)?);
-                }
-                let entry = PasswordEntry {
-                    name: name.clone(),
-                    username: username.unwrap_or_default(),
-                    password,
-                    url: normalize_hint(url),
-                    realm: normalize_hint(realm),
-                };
-                mypass::update(&file, &passphrase, entry, &params)?;
-                if !show {
                     announce_copied(
                         &format!("Password for '{}'", sanitize(&name)),
                         clear_timeout,
                     );
                 }
+            } else {
+                println!("Updated entry '{}' (password unchanged).", sanitize(&name));
             }
         }
         Some(Commands::Remove { name, yes }) => {

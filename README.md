@@ -33,7 +33,7 @@ mypass                           # browse and edit interactively
 | `mypass get <name> [--show\|--show-credentials]` | Print the username (if present) and copy the password to the clipboard. `--show` prints username and password on separate lines; `--show-credentials` prints `username:password`. |
 | `mypass list [PATTERN]`                     | List entries, optionally filtered by a case-insensitive substring of the name.                                 |
 | `mypass add <name> [username] [options]`    | Add an entry. The password is generated (and copied to the clipboard) unless `--input-password` is given.      |
-| `mypass update <name> [username] [options]` | Replace the username and password of an existing entry, or just the username/url/realm with `--keep-password`. |
+| `mypass update <name> [username] [options]` | Change specified fields of an existing entry; retain all omitted fields. |
 | `mypass remove <name> [--yes]`              | Remove an entry, after confirmation (`--yes` skips it).                                                        |
 | `mypass generate [options]`                 | Generate a password without storing it.                                                                        |
 | `mypass export`                             | Print the decrypted vault as JSON on stdout, for backup or migration.                                          |
@@ -48,13 +48,15 @@ Command options:
 - `--input-password` — type the password instead of generating one
   (`add`/`update` only)
 - `--url <url>` — the site this entry is for, used by the Firefox integration
-  when the entry name is not the hostname (`add`/`update` only); omitting it on
-  `update` clears it, like the username
-- `--realm <realm>` — the HTTP authentication realm on that site this entry is
-  for, when the site runs more than one (`add`/`update` only). Requires
-  `--url`, and omitting it on `update` clears it
-- `--keep-password` — on `update`, keep the existing password and change only
-  the username, url and realm (`update` only)
+  (`add`/`update` only)
+- `--realm <realm>` — the HTTP authentication realm on that site
+  (`add`/`update` only). Requires a URL in the resulting entry
+- `--change-password` — on `update`, explicitly replace the password; required
+  for password generation/input options and `--show`
+- `--clear-username`, `--clear-url`, `--clear-realm` — explicitly clear the
+  corresponding field on `update`. Omitted fields are kept. Clearing a URL
+  with an existing realm also requires `--clear-realm`. An update with no
+  requested changes is rejected
 - `--show` — print the password to stdout instead of copying it to the
   clipboard
 - `--show-credentials` — on `get`, print `username:password` without a
@@ -120,7 +122,7 @@ set only with the master passphrase in a terminal:
 ```sh
 mypass add github.com alice --url github.com      # declare the site with --url
 mypass add work-github alice --url github.com     # name can be anything; the url decides the match
-mypass update work-github --url gitlab.com --keep-password   # re-point it, password unchanged
+mypass update work-github --url gitlab.com   # re-point it, password unchanged
 mypass add nas-admin root --url nas.example --realm "Admin Area"   # one realm on a host
 ```
 
