@@ -953,3 +953,84 @@ fn update_rejects_conflicting_set_and_clear() {
             .failure();
     }
 }
+
+#[test]
+fn change_passphrase_preserves_entries_and_old_backup() {
+    let dir = TempDir::new().unwrap();
+    let vault = init_vault(&dir);
+    let password = add_entry(&vault, "site", "alice");
+    let before = std::fs::read(&vault).unwrap();
+    pw(&vault)
+        .arg("change-passphrase")
+        .write_stdin(format!("{PASSPHRASE}new passphrase\n"))
+        .assert()
+        .success()
+        .stdout(contains("Vault passphrase changed"))
+        .stderr(contains("backup still uses the previous passphrase"));
+    pw(&vault)
+        .args(["get", "site", "--show"])
+        .write_stdin("new passphrase\n")
+        .assert()
+        .success()
+        .stdout(format!("alice\n{password}\n"));
+    pw(&vault)
+        .arg("list")
+        .write_stdin(PASSPHRASE)
+        .assert()
+        .failure()
+        .stderr(contains("incorrect passphrase"));
+    let backup = dir.path().join("pw.scrypt.bak");
+    assert_eq!(std::fs::read(&backup).unwrap(), before);
+    pw(&backup)
+        .args(["get", "site", "--show"])
+        .write_stdin(PASSPHRASE)
+        .assert()
+        .success()
+        .stdout(format!("alice\n{password}\n"));
+}
+
+#[test]
+fn change_passphrase_failures_leave_vault_and_backup_unchanged() {
+    let dir = TempDir::new().unwrap();
+    let vault = init_vault(&dir);
+    add_entry(&vault, "site", "alice");
+    let before = std::fs::read(&vault).unwrap();
+    let backup = dir.path().join("pw.scrypt.bak");
+    let backup_before = std::fs::read(&backup).unwrap();
+    for (input, error) in [
+        (
+            "wrong passphrase\nnew passphrase\n".to_string(),
+            "incorrect passphrase",
+        ),
+        (PASSPHRASE.to_string(), "no passphrase on stdin"),
+    ] {
+        pw(&vault)
+            .arg("change-passphrase")
+            .write_stdin(input)
+            .assert()
+            .failure()
+            .stderr(contains(error));
+        assert_eq!(std::fs::read(&vault).unwrap(), before);
+        assert_eq!(std::fs::read(&backup).unwrap(), backup_before);
+    }
+}
+
+#[test]
+fn change_passphrase_preserves_exact_plaintext() {
+    let dir = TempDir::new().unwrap();
+    let vault = dir.path().join("pw.scrypt");
+    for json in [
+        r#" {"version":1,"extra":"keep","entries":[{"unknown":"keep"}]} "#,
+        "[ ]\n",
+    ] {
+        write_raw_vault(&vault, json);
+        pw(&vault)
+            .arg("change-passphrase")
+            .write_stdin(format!("{PASSPHRASE}new passphrase\n"))
+            .assert()
+            .success();
+        let encrypted = std::fs::read(&vault).unwrap();
+        let decrypted = scrypt_format::decrypt(&encrypted, b"new passphrase").unwrap();
+        assert_eq!(&*decrypted, json.as_bytes());
+    }
+}

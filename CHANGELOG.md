@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.14.0 (2026-11-08)
+
+- Add `mypass change-passphrase` to change the vault master passphrase.
+
 ## 0.13.0 (2026-11-07)
 
 - Retain unspecified fields in `mypass update`.

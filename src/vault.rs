@@ -237,13 +237,37 @@ pub fn store(
     store_plaintext(file, passphrase, &plaintext, params)
 }
 
+/// Re-encrypt the exact vault contents without interpreting or rewriting JSON.
+pub fn change_passphrase(
+    file: &Path,
+    current: &Passphrase,
+    new: &Passphrase,
+    params: &Params,
+) -> Result<(), Error> {
+    let data = fs::read(file).map_err(|source| Error::Read {
+        file: file.to_path_buf(),
+        source,
+    })?;
+    let plaintext = scrypt_format::decrypt(&data, current.as_bytes())?;
+    store_bytes(file, new, &plaintext, params)
+}
+
 fn store_plaintext(
     file: &Path,
     passphrase: &Passphrase,
     plaintext: &str,
     params: &Params,
 ) -> Result<(), Error> {
-    let ciphertext = scrypt_format::encrypt(plaintext.as_bytes(), passphrase.as_bytes(), params)?;
+    store_bytes(file, passphrase, plaintext.as_bytes(), params)
+}
+
+fn store_bytes(
+    file: &Path,
+    passphrase: &Passphrase,
+    plaintext: &[u8],
+    params: &Params,
+) -> Result<(), Error> {
+    let ciphertext = scrypt_format::encrypt(plaintext, passphrase.as_bytes(), params)?;
 
     let write_err = |source| Error::Write {
         file: file.to_path_buf(),

@@ -129,6 +129,22 @@ pub fn init(file: &Path, passphrase: &Passphrase, params: &Params) -> Result<(),
     store(file, passphrase, &[], params)
 }
 
+/// Change the vault passphrase, preserving its entries.
+///
+/// The previous vault is retained as `.bak`, encrypted with `current_passphrase`.
+pub fn change_passphrase(
+    file: &Path,
+    current_passphrase: &Passphrase,
+    new_passphrase: &Passphrase,
+    params: &Params,
+) -> Result<(), MyPassError> {
+    if !file.exists() {
+        return Err(MyPassError::FileNotFound(file.to_path_buf()));
+    }
+    vault::change_passphrase(file, current_passphrase, new_passphrase, params)
+        .map_err(|e| vault_err(file, e))
+}
+
 /// Look up the entry named `name`.
 pub fn get(file: &Path, passphrase: &Passphrase, name: &str) -> Result<PasswordEntry, MyPassError> {
     let entries = load(file, passphrase)?;

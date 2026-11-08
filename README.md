@@ -29,6 +29,7 @@ mypass                           # browse and edit interactively
 | Command                                     | Description                                                                                                    |
 |---------------------------------------------|----------------------------------------------------------------------------------------------------------------|
 | `mypass init`                               | Create a new empty vault. Asks for the passphrase twice.                                                       |
+| `mypass change-passphrase` | Change the master passphrase; confirm the new passphrase interactively. |
 | `mypass repair`                             | Inspect malformed and duplicate entries; remove or rename duplicates, then save with a `.bak` backup.          |
 | `mypass get <name> [--show\|--show-credentials]` | Print the username (if present) and copy the password to the clipboard. `--show` prints username and password on separate lines; `--show-credentials` prints `username:password`. |
 | `mypass list [PATTERN]`                     | List entries, optionally filtered by a case-insensitive substring of the name.                                 |
@@ -39,6 +40,13 @@ mypass                           # browse and edit interactively
 | `mypass export`                             | Print the decrypted vault as JSON on stdout, for backup or migration.                                          |
 | `mypass`                                    | Browse, create, update and delete entries in an interactive terminal.                                          |
 | `mypass install-browser [--uninstall]`      | Install (or remove) the Firefox native-messaging manifest for the browser integration. See below.              |
+
+Use `mypass change-passphrase` to change the vault's master passphrase. Enter the
+current passphrase, then enter and confirm the new passphrase. With
+`--passphrase-stdin`, supply the current passphrase on the first line and the new
+passphrase on the second line (no confirmation line). The `.bak` backup retains
+the previous vault encrypted with the old passphrase; existing external backups
+also retain their original passphrases.
 
 Command options:
 

@@ -103,6 +103,9 @@ enum Commands {
     /// Create a new empty vault
     Init {},
 
+    /// Change the vault passphrase (the backup retains the old passphrase)
+    ChangePassphrase {},
+
     /// Inspect malformed and duplicate entries and offer to remove them
     Repair {},
 
@@ -426,6 +429,14 @@ fn run() -> anyhow::Result<ExitCode> {
             mypass::init(&file, &passphrase, &params)?;
             println!("Initialized empty vault at {}", file.display());
         }
+        Some(Commands::ChangePassphrase {}) => {
+            let current = obtain_passphrase(cli.passphrase_stdin, false)?;
+            let new =
+                obtain_passphrase_with_prompt(cli.passphrase_stdin, true, "New passphrase: ")?;
+            mypass::change_passphrase(&file, &current, &new, &params)?;
+            println!("Vault passphrase changed.");
+            eprintln!("The .bak backup still uses the previous passphrase.");
+        }
         Some(Commands::Repair {}) => {
             let passphrase = obtain_passphrase(cli.passphrase_stdin, false)?;
             repair(&file, &passphrase, &params)?;
@@ -664,6 +675,14 @@ fn run() -> anyhow::Result<ExitCode> {
 /// Read the passphrase, either from stdin (`--passphrase-stdin`) or by
 /// prompting on the terminal. `confirm` asks twice (vault creation).
 fn obtain_passphrase(from_stdin: bool, confirm: bool) -> anyhow::Result<Passphrase> {
+    obtain_passphrase_with_prompt(from_stdin, confirm, "Passphrase: ")
+}
+
+fn obtain_passphrase_with_prompt(
+    from_stdin: bool,
+    confirm: bool,
+    prompt: &str,
+) -> anyhow::Result<Passphrase> {
     if from_stdin {
         let mut line = Zeroizing::new(String::new());
         let n = io::stdin()
@@ -678,9 +697,8 @@ fn obtain_passphrase(from_stdin: bool, confirm: bool) -> anyhow::Result<Passphra
         }
         Ok(Passphrase::new(std::mem::take(&mut *line)))
     } else {
-        let first = Passphrase::new(
-            rpassword::prompt_password("Passphrase: ").context("cannot read passphrase")?,
-        );
+        let first =
+            Passphrase::new(rpassword::prompt_password(prompt).context("cannot read passphrase")?);
         if confirm {
             let second = Passphrase::new(
                 rpassword::prompt_password("Confirm passphrase: ")
