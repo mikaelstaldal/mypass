@@ -10,16 +10,9 @@ use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 /// The package version is reported in `status.version`.
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-/// Locate the `mypass-browser-host` binary next to this test executable. The test
-/// is built into `<target>/debug/deps/`; the binary targets live one level up.
+/// Use Cargo's binary location independently of the test artifact layout.
 fn host_bin() -> PathBuf {
-    let mut path = std::env::current_exe().expect("current exe");
-    path.pop(); // drop the test executable
-    if path.ends_with("deps") {
-        path.pop();
-    }
-    path.push("mypass-browser-host");
-    path
+    PathBuf::from(env!("CARGO_BIN_EXE_mypass-browser-host"))
 }
 
 struct Host {
