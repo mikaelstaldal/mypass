@@ -29,6 +29,7 @@ mypass                           # browse and edit interactively
 | Command                                     | Description                                                                                                    |
 |---------------------------------------------|----------------------------------------------------------------------------------------------------------------|
 | `mypass init`                               | Create a new empty vault. Asks for the passphrase twice.                                                       |
+| `mypass update-params [--log-n N] [--r R] [--p P]` | Retune vault scrypt costs or set them explicitly. |
 | `mypass change-passphrase` | Change the master passphrase; confirm the new passphrase interactively. |
 | `mypass repair`                             | Inspect malformed and duplicate entries; remove or rename duplicates, then save with a `.bak` backup.          |
 | `mypass get <name> [--show\|--show-credentials]` | Print the username (if present) and copy the password to the clipboard. `--show` prints username and password on separate lines; `--show-credentials` prints `username:password`. |
@@ -40,6 +41,16 @@ mypass                           # browse and edit interactively
 | `mypass export`                             | Print the decrypted vault as JSON on stdout, for backup or migration.                                          |
 | `mypass`                                    | Browse, create, update and delete entries in an interactive terminal.                                          |
 | `mypass install-browser [--uninstall]`      | Install (or remove) the Firefox native-messaging manifest for the browser integration. See below.              |
+
+New vaults automatically tune scrypt to approximately one second on the current machine,
+using at least `logN=17, r=8, p=1` (128 MiB). Tuning increases `p` while retaining this memory cost;
+on slower machines the minimum cost may take longer than one second.
+Use `mypass init --log-n 18 --r 8 --p 1` to select costs explicitly. If any parameter is
+specified, omitted parameters use `17,8,1`; explicit choices may be lower than the automatic minimum.
+All vault updates, repairs, and passphrase changes retain the vault's existing costs.
+Use `mypass update-params` to retune an existing vault, or supply the same options to choose costs.
+Retuning can lower previously selected costs; the command prints the old and new parameters.
+Re-encryption preserves the exact vault contents and keeps the previous encrypted vault as `.bak`.
 
 Use `mypass change-passphrase` to change the vault's master passphrase. Enter the
 current passphrase, then enter and confirm the new passphrase. With
@@ -267,7 +278,7 @@ the offer still requires a top-level load in the tab you are looking at.
 ## File format and recovery
 
 The vault is a standard [scrypt encrypted-data format](https://github.com/Tarsnap/scrypt/blob/master/FORMAT)
-(version 0) file: scrypt KDF (`N=2^17, r=8, p=1` when writing), AES-256-CTR
+(version 0) file: scrypt KDF (automatically tuned, at least `N=2^17, r=8, p=1`), AES-256-CTR
 encryption and HMAC-SHA256 integrity protection. Inside is a small JSON
 document:
 

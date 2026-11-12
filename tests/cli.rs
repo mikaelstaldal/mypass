@@ -1034,3 +1034,67 @@ fn change_passphrase_preserves_exact_plaintext() {
         assert_eq!(&*decrypted, json.as_bytes());
     }
 }
+
+#[test]
+fn scrypt_parameters_survive_writes_and_can_be_updated() {
+    let dir = TempDir::new().unwrap();
+    let vault = dir.path().join("params.scrypt");
+    let read_params = || scrypt_format::parameters(&std::fs::read(&vault).unwrap()).unwrap();
+    pw(&vault)
+        .args(["init", "--log-n", "11", "--r", "4", "--p", "2"])
+        .write_stdin(PASSPHRASE)
+        .assert()
+        .success();
+    let initial = Params {
+        log_n: 11,
+        r: 4,
+        p: 2,
+    };
+    assert_eq!(read_params(), initial);
+    add_entry(&vault, "example", "user");
+    assert_eq!(read_params(), initial);
+    pw(&vault)
+        .args(["update-params", "--log-n", "12", "--r", "2", "--p", "3"])
+        .write_stdin(PASSPHRASE)
+        .assert()
+        .success();
+    let updated = Params {
+        log_n: 12,
+        r: 2,
+        p: 3,
+    };
+    assert_eq!(read_params(), updated);
+    assert_eq!(
+        scrypt_format::parameters(&std::fs::read(mypass::vault::backup_path(&vault)).unwrap())
+            .unwrap(),
+        initial
+    );
+    pw(&vault)
+        .args(["change-passphrase"])
+        .write_stdin("test passphrase\nnew passphrase\n")
+        .assert()
+        .success();
+    assert_eq!(read_params(), updated);
+    let entries = mypass::list(&vault, &mypass::Passphrase::new("new passphrase".into())).unwrap();
+    assert_eq!(entries[0].name, "example");
+}
+
+#[test]
+fn invalid_parameter_update_leaves_vault_unchanged() {
+    let dir = TempDir::new().unwrap();
+    let vault = init_vault(&dir);
+    let original = std::fs::read(&vault).unwrap();
+    pw(&vault)
+        .args(["update-params", "--r", "0"])
+        .write_stdin(PASSPHRASE)
+        .assert()
+        .failure();
+    assert_eq!(std::fs::read(&vault).unwrap(), original);
+    assert!(!mypass::vault::backup_path(&vault).exists());
+    pw(&vault)
+        .args(["update-params", "--log-n", "11"])
+        .write_stdin("wrong\n")
+        .assert()
+        .failure();
+    assert_eq!(std::fs::read(&vault).unwrap(), original);
+}

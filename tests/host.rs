@@ -204,7 +204,6 @@ impl Fixture {
                         url: Some(url.to_string()),
                         realm: realm.map(str::to_string),
                     },
-                    &PARAMS,
                 )
                 .unwrap();
             }

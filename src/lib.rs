@@ -7,6 +7,9 @@
 //! ever prompts or assumes a terminal — the passphrase enters every operation
 //! as a [`Passphrase`] parameter, so the same functions serve the CLI and any
 //! future non-interactive host.
+//!
+//! Mutating existing vaults preserves their authenticated KDF parameters. Use
+//! [`update_params`] to change costs. [`init`] uses its supplied parameters.
 
 pub mod scrypt_format;
 pub mod vault;
@@ -136,13 +139,21 @@ pub fn change_passphrase(
     file: &Path,
     current_passphrase: &Passphrase,
     new_passphrase: &Passphrase,
-    params: &Params,
 ) -> Result<(), MyPassError> {
     if !file.exists() {
         return Err(MyPassError::FileNotFound(file.to_path_buf()));
     }
-    vault::change_passphrase(file, current_passphrase, new_passphrase, params)
+    vault::change_passphrase(file, current_passphrase, new_passphrase)
         .map_err(|e| vault_err(file, e))
+}
+
+/// Change KDF parameters without changing the vault contents or passphrase.
+pub fn update_params(
+    file: &Path,
+    passphrase: &Passphrase,
+    params: &Params,
+) -> Result<(), MyPassError> {
+    vault::update_params(file, passphrase, params).map_err(|e| vault_err(file, e))
 }
 
 /// Look up the entry named `name`.
@@ -172,9 +183,9 @@ pub fn replace_all(
     file: &Path,
     passphrase: &Passphrase,
     entries: &[PasswordEntry],
-    params: &Params,
 ) -> Result<(), MyPassError> {
-    drop(load(file, passphrase)?);
+    let (old_entries, params) = load_with_params(file, passphrase)?;
+    drop(old_entries);
     let mut names = HashSet::with_capacity(entries.len());
     for entry in entries {
         validate_entry(entry)?;
@@ -185,7 +196,7 @@ pub fn replace_all(
             });
         }
     }
-    store(file, passphrase, entries, params)
+    store(file, passphrase, entries, &params)
 }
 
 /// Add a new entry. Fails if an entry with the same name exists.
@@ -193,10 +204,9 @@ pub fn add(
     file: &Path,
     passphrase: &Passphrase,
     new_entry: PasswordEntry,
-    params: &Params,
 ) -> Result<(), MyPassError> {
     validate_entry(&new_entry)?;
-    let mut entries = load(file, passphrase)?;
+    let (mut entries, params) = load_with_params(file, passphrase)?;
     if entries.iter().any(|e| e.name == new_entry.name) {
         return Err(MyPassError::AlreadyExists {
             name: new_entry.name.clone(),
@@ -204,7 +214,7 @@ pub fn add(
         });
     }
     entries.push(new_entry);
-    store(file, passphrase, &entries, params)
+    store(file, passphrase, &entries, &params)
 }
 
 /// Replace the username, password and `url` of an existing entry.
@@ -212,10 +222,9 @@ pub fn update(
     file: &Path,
     passphrase: &Passphrase,
     new_entry: PasswordEntry,
-    params: &Params,
 ) -> Result<(), MyPassError> {
     validate_entry(&new_entry)?;
-    let mut entries = load(file, passphrase)?;
+    let (mut entries, params) = load_with_params(file, passphrase)?;
     let Some(entry) = entries.iter_mut().find(|e| e.name == new_entry.name) else {
         return Err(MyPassError::NotFound {
             name: new_entry.name.clone(),
@@ -223,7 +232,7 @@ pub fn update(
         });
     };
     *entry = new_entry;
-    store(file, passphrase, &entries, params)
+    store(file, passphrase, &entries, &params)
 }
 
 /// Replace the username, `url` and `realm` of an existing entry while keeping
@@ -236,12 +245,11 @@ pub fn update_keep_password(
     username: String,
     url: Option<String>,
     realm: Option<String>,
-    params: &Params,
 ) -> Result<(), MyPassError> {
     validate_name(name)?;
     validate_username(&username)?;
     validate_site(url.as_deref(), realm.as_deref())?;
-    let mut entries = load(file, passphrase)?;
+    let (mut entries, params) = load_with_params(file, passphrase)?;
     let Some(entry) = entries.iter_mut().find(|e| e.name == name) else {
         return Err(MyPassError::NotFound {
             name: name.to_string(),
@@ -251,17 +259,12 @@ pub fn update_keep_password(
     entry.username = username;
     entry.url = url;
     entry.realm = realm;
-    store(file, passphrase, &entries, params)
+    store(file, passphrase, &entries, &params)
 }
 
 /// Remove the entry named `name`.
-pub fn remove(
-    file: &Path,
-    passphrase: &Passphrase,
-    name: &str,
-    params: &Params,
-) -> Result<(), MyPassError> {
-    let mut entries = load(file, passphrase)?;
+pub fn remove(file: &Path, passphrase: &Passphrase, name: &str) -> Result<(), MyPassError> {
+    let (mut entries, params) = load_with_params(file, passphrase)?;
     let original_len = entries.len();
     entries.retain(|e| e.name != name);
     if entries.len() == original_len {
@@ -270,7 +273,7 @@ pub fn remove(
             file: file.to_path_buf(),
         });
     }
-    store(file, passphrase, &entries, params)
+    store(file, passphrase, &entries, &params)
 }
 
 /// The decrypted vault as JSON (the same envelope that is stored encrypted),
@@ -285,6 +288,16 @@ fn load(file: &Path, passphrase: &Passphrase) -> Result<Vec<PasswordEntry>, MyPa
         return Err(MyPassError::FileNotFound(file.to_path_buf()));
     }
     vault::load(file, passphrase).map_err(|e| vault_err(file, e))
+}
+
+fn load_with_params(
+    file: &Path,
+    passphrase: &Passphrase,
+) -> Result<(Vec<PasswordEntry>, Params), MyPassError> {
+    if !file.exists() {
+        return Err(MyPassError::FileNotFound(file.to_path_buf()));
+    }
+    vault::load_with_params(file, passphrase).map_err(|e| vault_err(file, e))
 }
 
 fn store(
@@ -640,7 +653,7 @@ mod tests {
         let file = dir.path().join("pw.scrypt");
         init(&file, &passphrase(), &TEST_PARAMS).unwrap();
         for (name, password) in entries {
-            add(&file, &passphrase(), entry(name, password), &TEST_PARAMS).unwrap();
+            add(&file, &passphrase(), entry(name, password)).unwrap();
         }
         (dir, file)
     }
@@ -675,14 +688,14 @@ mod tests {
     #[test]
     fn add_duplicate_name() {
         let (_dir, file) = new_vault(&[("a", "pw-a")]);
-        let err = add(&file, &passphrase(), entry("a", "other"), &TEST_PARAMS).unwrap_err();
+        let err = add(&file, &passphrase(), entry("a", "other")).unwrap_err();
         assert!(matches!(err, MyPassError::AlreadyExists { name, .. } if name == "a"));
     }
 
     #[test]
     fn update_existing() {
         let (_dir, file) = new_vault(&[("a", "pw-a")]);
-        update(&file, &passphrase(), entry("a", "pw-new"), &TEST_PARAMS).unwrap();
+        update(&file, &passphrase(), entry("a", "pw-new")).unwrap();
         assert_eq!(
             get(&file, &passphrase(), "a").unwrap().password,
             "pw-new".into()
@@ -692,14 +705,14 @@ mod tests {
     #[test]
     fn update_unknown_name() {
         let (_dir, file) = new_vault(&[]);
-        let err = update(&file, &passphrase(), entry("a", "pw"), &TEST_PARAMS).unwrap_err();
+        let err = update(&file, &passphrase(), entry("a", "pw")).unwrap_err();
         assert!(matches!(err, MyPassError::NotFound { .. }));
     }
 
     #[test]
     fn remove_existing() {
         let (_dir, file) = new_vault(&[("a", "pw-a"), ("b", "pw-b")]);
-        remove(&file, &passphrase(), "a", &TEST_PARAMS).unwrap();
+        remove(&file, &passphrase(), "a").unwrap();
         let names: Vec<String> = list(&file, &passphrase())
             .unwrap()
             .into_iter()
@@ -711,7 +724,7 @@ mod tests {
     #[test]
     fn remove_unknown_name() {
         let (_dir, file) = new_vault(&[]);
-        let err = remove(&file, &passphrase(), "a", &TEST_PARAMS).unwrap_err();
+        let err = remove(&file, &passphrase(), "a").unwrap_err();
         assert!(matches!(err, MyPassError::NotFound { .. }));
     }
 
@@ -722,7 +735,7 @@ mod tests {
         for err in [
             get(&file, &passphrase(), "a").unwrap_err(),
             list(&file, &passphrase()).map(|_| ()).unwrap_err(),
-            add(&file, &passphrase(), entry("a", "pw"), &TEST_PARAMS).unwrap_err(),
+            add(&file, &passphrase(), entry("a", "pw")).unwrap_err(),
         ] {
             assert!(matches!(err, MyPassError::FileNotFound(_)));
         }
@@ -748,7 +761,7 @@ mod tests {
     fn rejects_invalid_names() {
         let (_dir, file) = new_vault(&[]);
         for name in ["", "with\nnewline", "with\x1b[31mescape", &"x".repeat(257)] {
-            let err = add(&file, &passphrase(), entry(name, "pw"), &TEST_PARAMS).unwrap_err();
+            let err = add(&file, &passphrase(), entry(name, "pw")).unwrap_err();
             assert!(
                 matches!(err, MyPassError::InvalidInput { .. }),
                 "name {name:?}"
@@ -777,7 +790,7 @@ mod tests {
             url: None,
             realm: None,
         };
-        let err = add(&file, &passphrase(), bad, &TEST_PARAMS).unwrap_err();
+        let err = add(&file, &passphrase(), bad).unwrap_err();
         assert!(matches!(err, MyPassError::InvalidInput { .. }));
     }
 
@@ -816,7 +829,7 @@ mod tests {
             url: None,
             realm: None,
         };
-        add(&file, &passphrase(), e, &TEST_PARAMS).unwrap();
+        add(&file, &passphrase(), e).unwrap();
         assert_eq!(get(&file, &passphrase(), "a").unwrap().username, "");
     }
 
@@ -1090,13 +1103,7 @@ mod tests {
     #[test]
     fn url_round_trips_and_is_omitted_when_absent() {
         let (_dir, file) = new_vault(&[("plain", "pw-plain")]);
-        add(
-            &file,
-            &passphrase(),
-            with_url("work", "github.com"),
-            &TEST_PARAMS,
-        )
-        .unwrap();
+        add(&file, &passphrase(), with_url("work", "github.com")).unwrap();
         let json = export(&file, &passphrase()).unwrap();
         let value: serde_json::Value = serde_json::from_str(&json).unwrap();
         // A url-less entry carries no "url" key, so it stays byte-identical to
@@ -1194,14 +1201,12 @@ mod tests {
             &file,
             &passphrase(),
             with_realm("plain", "example.com", None),
-            &TEST_PARAMS,
         )
         .unwrap();
         add(
             &file,
             &passphrase(),
             with_realm("admin", "example.com", Some("Admin")),
-            &TEST_PARAMS,
         )
         .unwrap();
         let json = export(&file, &passphrase()).unwrap();
@@ -1228,7 +1233,7 @@ mod tests {
             url: None,
             realm: Some("Admin".to_string()),
         };
-        let err = add(&file, &passphrase(), bad, &TEST_PARAMS).unwrap_err();
+        let err = add(&file, &passphrase(), bad).unwrap_err();
         assert!(matches!(
             err,
             MyPassError::InvalidInput { what: "realm", .. }
@@ -1245,7 +1250,7 @@ mod tests {
             url: Some("example.com".to_string()),
             realm: Some("with\nnewline".to_string()),
         };
-        let err = add(&file, &passphrase(), bad, &TEST_PARAMS).unwrap_err();
+        let err = add(&file, &passphrase(), bad).unwrap_err();
         assert!(matches!(
             err,
             MyPassError::InvalidInput { what: "realm", .. }
@@ -1262,7 +1267,7 @@ mod tests {
             url: Some("with\nnewline".to_string()),
             realm: None,
         };
-        let err = add(&file, &passphrase(), bad, &TEST_PARAMS).unwrap_err();
+        let err = add(&file, &passphrase(), bad).unwrap_err();
         assert!(matches!(err, MyPassError::InvalidInput { what: "url", .. }));
     }
 
@@ -1276,7 +1281,6 @@ mod tests {
             "new-user".to_string(),
             Some("github.com".to_string()),
             Some("Admin".to_string()),
-            &TEST_PARAMS,
         )
         .unwrap();
         let e = get(&file, &passphrase(), "a").unwrap();
@@ -1290,16 +1294,8 @@ mod tests {
     #[test]
     fn update_keep_password_unknown_name() {
         let (_dir, file) = new_vault(&[]);
-        let err = update_keep_password(
-            &file,
-            &passphrase(),
-            "a",
-            String::new(),
-            None,
-            None,
-            &TEST_PARAMS,
-        )
-        .unwrap_err();
+        let err =
+            update_keep_password(&file, &passphrase(), "a", String::new(), None, None).unwrap_err();
         assert!(matches!(err, MyPassError::NotFound { .. }));
     }
 
@@ -1307,7 +1303,7 @@ mod tests {
     fn replace_all_commits_a_batch_after_verifying_passphrase() {
         let (_dir, file) = new_vault(&[("old", "pw-old")]);
         let entries = vec![entry("new", "pw-new")];
-        replace_all(&file, &passphrase(), &entries, &TEST_PARAMS).unwrap();
+        replace_all(&file, &passphrase(), &entries).unwrap();
         assert!(matches!(
             get(&file, &passphrase(), "old"),
             Err(MyPassError::NotFound { .. })
@@ -1322,7 +1318,6 @@ mod tests {
             &file,
             &Passphrase::new("wrong".to_string()),
             &[entry("new", "pw-new")],
-            &TEST_PARAMS,
         )
         .unwrap_err();
         assert!(matches!(err, MyPassError::WrongPassphrase));
@@ -1339,7 +1334,6 @@ mod tests {
             &file,
             &passphrase(),
             &[entry("same", "one"), entry("same", "two")],
-            &TEST_PARAMS,
         )
         .unwrap_err();
         assert!(matches!(err, MyPassError::AlreadyExists { .. }));

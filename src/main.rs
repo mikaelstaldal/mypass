@@ -61,8 +61,7 @@ struct Cli {
     #[arg(long, global = true, default_value_t = 20)]
     clear_timeout: u64,
 
-    /// Override the scrypt CPU/memory cost (log2 of N) when writing;
-    /// intended for tests
+    /// Override log2(N) for init and update-params; intended for tests
     #[arg(long, global = true, hide = true)]
     scrypt_log_n: Option<u8>,
 
@@ -98,10 +97,45 @@ struct UpdatePasswordOptions {
     password_charset: Option<String>,
 }
 
+#[derive(Args)]
+struct ScryptOptions {
+    /// scrypt log2(N); omitted fields use 17,8,1 when any parameter is specified
+    #[arg(long, alias = "logN")]
+    log_n: Option<u8>,
+    /// scrypt block size
+    #[arg(long)]
+    r: Option<u32>,
+    /// scrypt parallelization cost
+    #[arg(long)]
+    p: Option<u32>,
+}
+
+impl ScryptOptions {
+    fn resolve(&self, test_log_n: Option<u8>) -> anyhow::Result<Params> {
+        if self.log_n.is_none() && self.r.is_none() && self.p.is_none() && test_log_n.is_none() {
+            return Ok(mypass::scrypt_format::tune()?);
+        }
+        Ok(Params {
+            log_n: self.log_n.or(test_log_n).unwrap_or(17),
+            r: self.r.unwrap_or(8),
+            p: self.p.unwrap_or(1),
+        })
+    }
+}
+
 #[derive(Subcommand)]
 enum Commands {
     /// Create a new empty vault
-    Init {},
+    Init {
+        #[command(flatten)]
+        scrypt: ScryptOptions,
+    },
+
+    /// Re-encrypt with new scrypt costs (automatically tuned if omitted)
+    UpdateParams {
+        #[command(flatten)]
+        scrypt: ScryptOptions,
+    },
 
     /// Change the vault passphrase (the backup retains the old passphrase)
     ChangePassphrase {},
@@ -413,10 +447,6 @@ fn run() -> anyhow::Result<ExitCode> {
             .unwrap_or_else(|| PathBuf::from("."))
             .join("mypass.scrypt")
     });
-    let params = Params {
-        log_n: cli.scrypt_log_n.unwrap_or(Params::default().log_n),
-        ..Params::default()
-    };
     let clear_timeout = cli.clear_timeout;
 
     // Holds the value copied to the clipboard, if any, so it can be cleared
@@ -424,22 +454,33 @@ fn run() -> anyhow::Result<ExitCode> {
     let mut pending_clear: Option<CopiedPassword> = None;
 
     match cli.command {
-        Some(Commands::Init {}) => {
+        Some(Commands::Init { scrypt }) => {
+            let params = scrypt.resolve(cli.scrypt_log_n)?;
             let passphrase = obtain_passphrase(cli.passphrase_stdin, true)?;
             mypass::init(&file, &passphrase, &params)?;
             println!("Initialized empty vault at {}", file.display());
+        }
+        Some(Commands::UpdateParams { scrypt }) => {
+            let previous = mypass::scrypt_format::parameters(&fs::read(&file)?)?;
+            let params = scrypt.resolve(cli.scrypt_log_n)?;
+            let passphrase = obtain_passphrase(cli.passphrase_stdin, false)?;
+            mypass::update_params(&file, &passphrase, &params)?;
+            println!(
+                "Vault scrypt parameters updated: logN={}, r={}, p={} -> logN={}, r={}, p={}",
+                previous.log_n, previous.r, previous.p, params.log_n, params.r, params.p
+            );
         }
         Some(Commands::ChangePassphrase {}) => {
             let current = obtain_passphrase(cli.passphrase_stdin, false)?;
             let new =
                 obtain_passphrase_with_prompt(cli.passphrase_stdin, true, "New passphrase: ")?;
-            mypass::change_passphrase(&file, &current, &new, &params)?;
+            mypass::change_passphrase(&file, &current, &new)?;
             println!("Vault passphrase changed.");
             eprintln!("The .bak backup still uses the previous passphrase.");
         }
         Some(Commands::Repair {}) => {
             let passphrase = obtain_passphrase(cli.passphrase_stdin, false)?;
-            repair(&file, &passphrase, &params)?;
+            repair(&file, &passphrase)?;
         }
         Some(Commands::Get {
             name,
@@ -512,7 +553,7 @@ fn run() -> anyhow::Result<ExitCode> {
                 url: normalize_hint(url),
                 realm: normalize_hint(realm),
             };
-            mypass::add(&file, &passphrase, entry, &params)?;
+            mypass::add(&file, &passphrase, entry)?;
             if !show {
                 announce_copied(
                     &format!("Password for '{}'", sanitize(&name)),
@@ -581,7 +622,7 @@ fn run() -> anyhow::Result<ExitCode> {
             if change_password && !show {
                 pending_clear = Some(copy_to_clipboard(entry.password.expose(), clear_timeout)?);
             }
-            mypass::update(&file, &passphrase, entry, &params)?;
+            mypass::update(&file, &passphrase, entry)?;
             if let Some(password) = changed_password {
                 if show {
                     println!("{}", *password);
@@ -601,7 +642,7 @@ fn run() -> anyhow::Result<ExitCode> {
                 return Ok(ExitCode::FAILURE);
             }
             let passphrase = obtain_passphrase(cli.passphrase_stdin, false)?;
-            mypass::remove(&file, &passphrase, &name, &params)?;
+            mypass::remove(&file, &passphrase, &name)?;
             println!("Removed entry '{}'.", sanitize(&name));
         }
         Some(Commands::Generate {
@@ -657,7 +698,7 @@ fn run() -> anyhow::Result<ExitCode> {
                 if cli.passphrase_stdin {
                     bail!("--passphrase-stdin cannot be used with the interactive TUI");
                 }
-                tui::run(&file, &params, clear_timeout)?;
+                tui::run(&file, clear_timeout)?;
             } else {
                 Cli::command().print_help()?;
                 return Ok(ExitCode::FAILURE);
@@ -834,7 +875,7 @@ fn confirm(prompt: &str) -> anyhow::Result<bool> {
     Ok(matches!(line.trim(), "y" | "Y" | "yes" | "Yes"))
 }
 
-fn repair(file: &Path, passphrase: &Passphrase, params: &Params) -> anyhow::Result<()> {
+fn repair(file: &Path, passphrase: &Passphrase) -> anyhow::Result<()> {
     if !file.exists() {
         bail!("no vault at {} - run `mypass init`", file.display());
     }
@@ -1007,7 +1048,7 @@ fn repair(file: &Path, passphrase: &Passphrase, params: &Params) -> anyhow::Resu
         return Ok(());
     }
     document.remove_entries(&removed);
-    mypass::vault::store_repair(file, passphrase, &document, params)?;
+    mypass::vault::store_repair(file, passphrase, &document)?;
     if renamed > 0 {
         if count == 0 {
             println!(

@@ -15,9 +15,9 @@ use ratatui::widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragra
 use ratatui::{Frame, Terminal};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use mypass::{Params, PasswordEntry, Secret};
+use mypass::{PasswordEntry, Secret};
 
-pub fn run(file: &Path, params: &Params, clear_timeout: u64) -> anyhow::Result<()> {
+pub fn run(file: &Path, clear_timeout: u64) -> anyhow::Result<()> {
     let passphrase = super::obtain_passphrase(false, false)?;
     let entries = mypass::list(file, &passphrase)?;
     drop(passphrase);
@@ -35,7 +35,7 @@ pub fn run(file: &Path, params: &Params, clear_timeout: u64) -> anyhow::Result<(
     terminal.leave()?;
 
     let result = match app.exit {
-        Exit::Save => save_with_retry(file, params, &app.entries),
+        Exit::Save => save_with_retry(file, &app.entries),
         Exit::Discard => {
             eprintln!("Changes discarded.");
             Ok(())
@@ -50,10 +50,10 @@ pub fn run(file: &Path, params: &Params, clear_timeout: u64) -> anyhow::Result<(
     result
 }
 
-fn save_with_retry(file: &Path, params: &Params, entries: &[PasswordEntry]) -> anyhow::Result<()> {
+fn save_with_retry(file: &Path, entries: &[PasswordEntry]) -> anyhow::Result<()> {
     loop {
         let result = super::obtain_passphrase(false, false).and_then(|passphrase| {
-            mypass::replace_all(file, &passphrase, entries, params).map_err(Into::into)
+            mypass::replace_all(file, &passphrase, entries).map_err(Into::into)
         });
         match result {
             Ok(()) => {

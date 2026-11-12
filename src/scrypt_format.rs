@@ -60,7 +60,7 @@ pub struct Params {
 }
 
 impl Default for Params {
-    /// Fixed write-side defaults: `N = 2^17, r = 8, p = 1` (~128 MiB).
+    /// Minimum automatic write-side defaults: `N = 2^17, r = 8, p = 1` (~128 MiB).
     fn default() -> Self {
         Params {
             log_n: 17,
@@ -182,11 +182,9 @@ fn encrypt_with_salt(
     Ok(out)
 }
 
-/// Decrypt a scrypt-format file image. Errors distinguish "wrong file type"
-/// ([`Error::NotScryptFormat`]), "wrong passphrase"
-/// ([`Error::WrongPassphrase`]) and "damaged file" ([`Error::Corrupt`]).
-pub fn decrypt(data: &[u8], passphrase: &[u8]) -> Result<Zeroizing<Vec<u8>>, Error> {
-    if data.len() < 6 || &data[..6] != MAGIC {
+/// Read validated header parameters. These are authenticated only after decryption.
+pub fn parameters(data: &[u8]) -> Result<Params, Error> {
+    if data.len() < 7 || &data[..6] != MAGIC {
         return Err(Error::NotScryptFormat);
     }
     if data[6] != VERSION {
@@ -206,6 +204,31 @@ pub fn decrypt(data: &[u8], passphrase: &[u8]) -> Result<Zeroizing<Vec<u8>>, Err
         return Err(Error::NotScryptFormat);
     }
 
+    Ok(params)
+}
+
+/// Calibrate CPU cost to approximately one second, keeping at least the
+/// default memory and CPU cost. Parallelization cost avoids increasing memory
+/// beyond the default 128 MiB. Calibration never uses a user's secrets.
+pub fn tune() -> Result<Params, Error> {
+    let mut params = Params::default();
+    let started = std::time::Instant::now();
+    drop(derive_keys(b"mypass calibration", &[0; SALT_LEN], &params)?);
+    let seconds = started.elapsed().as_secs_f64().max(0.001);
+    params.p = calibrated_p(seconds);
+    validate(&params)?;
+    Ok(params)
+}
+
+fn calibrated_p(seconds: f64) -> u32 {
+    (1.0 / seconds).round().clamp(1.0, MAX_P as f64) as u32
+}
+
+/// Decrypt a scrypt-format file image. Errors distinguish "wrong file type"
+/// ([`Error::NotScryptFormat`]), "wrong passphrase"
+/// ([`Error::WrongPassphrase`]) and "damaged file" ([`Error::Corrupt`]).
+pub fn decrypt(data: &[u8], passphrase: &[u8]) -> Result<Zeroizing<Vec<u8>>, Error> {
+    let params = parameters(data)?;
     let salt = &data[16..48];
     let dk = derive_keys(passphrase, salt, &params)?;
     let (key_enc, key_hmac) = dk.split_at(32);
@@ -266,6 +289,19 @@ mod tests {
         let b = encrypted();
         assert_ne!(a[16..48], b[16..48]);
         assert_ne!(a[HEADER_LEN..], b[HEADER_LEN..]);
+    }
+
+    #[test]
+    fn calibration_respects_minimum_and_maximum_costs() {
+        assert_eq!(calibrated_p(2.0), 1);
+        assert_eq!(calibrated_p(1.0), 1);
+        assert_eq!(calibrated_p(0.25), 4);
+        assert_eq!(calibrated_p(0.000001), MAX_P);
+    }
+
+    #[test]
+    fn short_magic_only_header_is_rejected_without_panicking() {
+        assert_eq!(parameters(b"scrypt"), Err(Error::NotScryptFormat));
     }
 
     #[test]

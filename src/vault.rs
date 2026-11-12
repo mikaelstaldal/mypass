@@ -97,6 +97,14 @@ pub fn to_json(entries: &[PasswordEntry]) -> Result<Zeroizing<String>, Error> {
 /// Decrypt and parse the vault. Read-only: never creates, locks or touches
 /// the file.
 pub fn load(file: &Path, passphrase: &Passphrase) -> Result<Vec<PasswordEntry>, Error> {
+    load_with_params(file, passphrase).map(|(entries, _)| entries)
+}
+
+/// Load entries and the KDF parameters authenticated by the same decryption.
+pub fn load_with_params(
+    file: &Path,
+    passphrase: &Passphrase,
+) -> Result<(Vec<PasswordEntry>, Params), Error> {
     let data = fs::read(file).map_err(|source| Error::Read {
         file: file.to_path_buf(),
         source,
@@ -105,14 +113,16 @@ pub fn load(file: &Path, passphrase: &Passphrase) -> Result<Vec<PasswordEntry>, 
     // On parse failure the decrypted bytes are deliberately not included in
     // the error (serde_json errors carry positions, not data).
     let parsed: VaultJson = serde_json::from_slice(&plaintext).map_err(Error::InvalidJson)?;
-    match parsed {
+    let params = scrypt_format::parameters(&data)?;
+    let entries = match parsed {
         VaultJson::Envelope {
             version: ENVELOPE_VERSION,
             entries,
         } => Ok(entries),
         VaultJson::Envelope { version, .. } => Err(Error::UnsupportedVersion(version)),
         VaultJson::Legacy(entries) => Ok(entries),
-    }
+    }?;
+    Ok((entries, params))
 }
 
 /// Decrypt a vault for repair without requiring every entry to deserialize.
@@ -146,12 +156,14 @@ pub fn load_for_repair(file: &Path, passphrase: &Passphrase) -> Result<RepairDoc
         entries,
         legacy,
         extra,
+        params: scrypt_format::parameters(&data)?,
     })
 }
 
 pub struct RepairDocument {
     pub entries: Vec<serde_json::Value>,
     legacy: bool,
+    params: Params,
     extra: serde_json::Map<String, serde_json::Value>,
 }
 
@@ -187,12 +199,12 @@ impl Drop for RepairDocument {
     }
 }
 
-/// Save a repair document with the same atomic write and backup as `store`.
+/// Save a repair document with its authenticated KDF parameters and the same
+/// atomic write and backup as `store`.
 pub fn store_repair(
     file: &Path,
     passphrase: &Passphrase,
     document: &RepairDocument,
-    params: &Params,
 ) -> Result<(), Error> {
     let plaintext = if document.legacy {
         serde_json::to_string(&document.entries)
@@ -212,7 +224,7 @@ pub fn store_repair(
     }
     .map(Zeroizing::new)
     .map_err(Error::InvalidJson)?;
-    store_plaintext(file, passphrase, &plaintext, params)
+    store_plaintext(file, passphrase, &plaintext, &document.params)
 }
 
 /// Encrypt and write the vault atomically.
@@ -238,18 +250,25 @@ pub fn store(
 }
 
 /// Re-encrypt the exact vault contents without interpreting or rewriting JSON.
-pub fn change_passphrase(
-    file: &Path,
-    current: &Passphrase,
-    new: &Passphrase,
-    params: &Params,
-) -> Result<(), Error> {
+/// Retains authenticated KDF parameters.
+pub fn change_passphrase(file: &Path, current: &Passphrase, new: &Passphrase) -> Result<(), Error> {
     let data = fs::read(file).map_err(|source| Error::Read {
         file: file.to_path_buf(),
         source,
     })?;
     let plaintext = scrypt_format::decrypt(&data, current.as_bytes())?;
-    store_bytes(file, new, &plaintext, params)
+    let params = scrypt_format::parameters(&data)?;
+    store_bytes(file, new, &plaintext, &params)
+}
+
+/// Change KDF parameters, preserving the exact decrypted content and a backup.
+pub fn update_params(file: &Path, passphrase: &Passphrase, params: &Params) -> Result<(), Error> {
+    let data = fs::read(file).map_err(|source| Error::Read {
+        file: file.to_path_buf(),
+        source,
+    })?;
+    let plaintext = scrypt_format::decrypt(&data, passphrase.as_bytes())?;
+    store_bytes(file, passphrase, &plaintext, params)
 }
 
 fn store_plaintext(
@@ -503,7 +522,7 @@ mod tests {
             r: 8,
             p: 1,
         };
-        let err = store(&file, &passphrase(), &[], &bad_params).unwrap_err();
+        let err = update_params(&file, &passphrase(), &bad_params).unwrap_err();
         assert!(matches!(err, Error::Format(_)));
 
         assert_eq!(load(&file, &passphrase()).unwrap(), entries);
@@ -525,6 +544,36 @@ mod tests {
         store(&file, &passphrase(), &entries, &TEST_PARAMS).unwrap();
         assert!(!tmp.exists());
         assert_eq!(load(&file, &passphrase()).unwrap(), entries);
+    }
+
+    #[test]
+    fn repair_preserves_costs_and_reparameterization_preserves_raw_json() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = vault_file(&dir);
+        let params = Params {
+            log_n: 10,
+            r: 4,
+            p: 2,
+        };
+        let raw = br#" { "version":1, "entries":[], "extra":"preserved" } "#;
+        fs::write(
+            &file,
+            scrypt_format::encrypt(raw, PASSPHRASE.as_bytes(), &params).unwrap(),
+        )
+        .unwrap();
+        update_params(&file, &passphrase(), &TEST_PARAMS).unwrap();
+        let data = fs::read(&file).unwrap();
+        assert_eq!(scrypt_format::parameters(&data).unwrap(), TEST_PARAMS);
+        assert_eq!(
+            &*scrypt_format::decrypt(&data, PASSPHRASE.as_bytes()).unwrap(),
+            raw
+        );
+        let document = load_for_repair(&file, &passphrase()).unwrap();
+        store_repair(&file, &passphrase(), &document).unwrap();
+        assert_eq!(
+            scrypt_format::parameters(&fs::read(file).unwrap()).unwrap(),
+            TEST_PARAMS
+        );
     }
 
     #[test]

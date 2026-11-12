@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.0 (2026-11-12)
+
+- Tune scrypt costs automatically for new vaults, or set them with `mypass init --log-n N --r R --p P`.
+- Retain vault scrypt costs on updates and add `mypass update-params` to change them.
+- Remove unused scrypt parameter arguments from library operations that retain the vault's costs.
+
 ## 0.14.0 (2026-11-08)
 
 - Add `mypass change-passphrase` to change the vault master passphrase.
